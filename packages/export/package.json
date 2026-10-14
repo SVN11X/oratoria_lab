@@ -1,0 +1,15 @@
+{
+  "name": "@oratoria/export",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7",
+    "@oratoria/audio": "workspace:*",
+    "@oratoria/core": "workspace:*",
+    "@oratoria/evaluation": "workspace:*"
+  }
+}

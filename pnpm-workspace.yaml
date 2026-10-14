@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  sharp: false
+  onnxruntime-node: false
+  protobufjs: false
+
+minimumReleaseAge: 0
+
+overrides:
+  '@huggingface/transformers>onnxruntime-node': '-'
+  '@huggingface/transformers>sharp': '-'

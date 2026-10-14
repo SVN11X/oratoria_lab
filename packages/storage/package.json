@@ -1,0 +1,14 @@
+{
+  "name": "@oratoria/storage",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@oratoria/core": "workspace:*",
+    "idb": "8.0.4",
+    "@tauri-apps/api": "2.12.3"
+  }
+}

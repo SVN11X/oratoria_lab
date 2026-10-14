@@ -1,0 +1,28 @@
+{
+  "name": "@oratoria/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "build": "node ../../scripts/copy-wasm.mjs && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router-dom": "7.18.4",
+    "zustand": "5.0.15",
+    "echarts": "6.1.0",
+    "lucide-react": "1.55.0",
+    "@oratoria/core": "workspace:*",
+    "@oratoria/audio": "workspace:*",
+    "@oratoria/evaluation": "workspace:*",
+    "@oratoria/simulation": "workspace:*",
+    "@oratoria/storage": "workspace:*",
+    "@oratoria/export": "workspace:*",
+    "@oratoria/model-manager": "workspace:*",
+    "@oratoria/transcription": "workspace:*",
+    "@huggingface/transformers": "3.8.1"
+  }
+}

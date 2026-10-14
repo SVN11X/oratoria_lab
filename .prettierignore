@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+node_modules
+dist
+target
+playwright-report
+test-results
+apps/web/public/ort
+apps/web/public/third-party
+docs/third-party

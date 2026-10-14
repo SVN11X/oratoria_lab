@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+playwright-report/
+test-results/
+apps/web/public/ort/
+models/downloads/
+*.log
+.DS_Store
+apps/web/public/third-party/

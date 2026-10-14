@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local-session-storage",
+  "description": "Acceso exclusivo a sesiones locales desde la ventana principal",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-save-session",
+    "allow-list-sessions",
+    "allow-get-session",
+    "allow-read-audio",
+    "allow-delete-session"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@oratoria/transcription",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@oratoria/core": "workspace:*",
+    "@oratoria/model-manager": "workspace:*",
+    "@huggingface/transformers": "3.8.1"
+  }
+}
