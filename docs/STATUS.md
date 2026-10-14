@@ -59,4 +59,12 @@ No se implementaron LLM, repreguntas semánticas, MediaPipe, síntesis, PDF, cif
 
 ## Siguiente etapa
 
+### Comprobación posterior en el repositorio publicado
+
+El run público [38492791788](https://github.com/SVN11X/oratoria_lab/actions/runs/38492791788) ejecutó Chromium en GitHub Actions el 13 de octubre de 2026 (21:54, hora de Chile): **7 de 8 E2E pasados, uno fallido por contraste**. Pasaron los recorridos de audio/importación/exportación/eliminación, MediaRecorder con micrófono sintético, permiso rechazado, práctica guiada, apertura offline, copia completa y copia cifrada. El recorrido de tema/responsive/accesibilidad se detuvo en la auditoría inicial de contraste; sus pasos posteriores no se consideran verificados.
+
+La corrección de esta revisión oscurece el color de texto secundario y añade scroll vertical al sidebar para mantener su pie dentro del fondo lateral. Debe comprobarse con una nueva ejecución de CI al subir el parche. No se han ejecutado navegador o micrófono físico nuevos en el entorno local de esta corrección. Las tablas anteriores documentan la entrega original y sus límites en ese entorno. Pasos de publicación: [PUBLICACION](PUBLICACION.md).
+
+En esta corrección se ejecutaron `pnpm format:check` y `pnpm check`: 55 tests pasados en 5 archivos, lint/typecheck correctos y build raíz con 78 recursos verificados. La compilación con `VITE_BASE_PATH=/oratoria_lab/` también pasó y validó todos los recursos. El contraste calculado del nuevo texto secundario es 4,92:1 sobre el panel suave y 5,14:1 sobre el fondo principal. Estos cálculos y builds no sustituyen repetir axe en Chromium; el E2E de la corrección queda pendiente en CI.
+
 Ejecutar los ocho E2E, incluyendo copias completas/cifradas, escuchar grabaciones reales, verificar Whisper con instalación real y corpus español consentido, y compilar/probar Tauri en los tres OS. Registrar resultados y resolver compatibilidades antes de introducir evaluación semántica con LLM o afirmar soporte completo de una plataforma.

@@ -129,14 +129,16 @@ La UI se concentra en una app reutilizada por Tauri; se evita duplicar frontend 
 
 ## Publicar en GitHub y Pages
 
-No se creó ni modificó un repositorio remoto en esta entrega. Crea un repositorio vacío llamado `oratoria-lab` en tu cuenta y ejecuta dentro de esta carpeta:
+Para el repositorio publicado [SVN11X/oratoria_lab](https://github.com/SVN11X/oratoria_lab), sigue [PUBLICACION](docs/PUBLICACION.md): incorporar la corrección de contraste, comprobar Calidad web, activar Pages con GitHub Actions y ejecutar el workflow manual de publicación. La URL esperada es `https://svn11x.github.io/oratoria_lab/`.
+
+Para crear otro repositorio desde esta carpeta, puedes ejecutar:
 
 ```bash
 git init
 git branch -M main
 git add .
 git commit -m "Implementar núcleo local de Oratoria Lab"
-git remote add origin https://github.com/SVN11X/oratoria-lab.git
+git remote add origin https://github.com/SVN11X/oratoria_lab.git
 git push -u origin main
 ```
 
