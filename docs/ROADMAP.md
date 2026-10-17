@@ -16,6 +16,8 @@ Mejorar registro de revisiones y procedencia de texto editado, comparación de r
 
 ## P2: evaluación y conversación con modelos locales
 
+El simulador de defensa ya incluye una primera versión: preguntas, repreguntas, interrupciones y comentario de contenido con un servicio compatible con OpenAI configurado por el usuario, con respaldo por reglas. Falta un modelo instalable dentro de la app y validar la calidad de las preguntas con evaluadores humanos.
+
 Introducir LLM compatible/licenciado con instalación explícita, catálogo verificable, estimación de memoria y fallback claro. Iniciar con un backend realmente ejecutable y probado; después WebLLM o llama.cpp según plataforma. No añadir Ollama como requisito.
 
 Validar hallazgos con Zod y citas/timestamps contra el texto. Rechazar evidencias inexistentes. Separar hallazgo interpretativo de cálculo; registrar modelo, cuantización, prompt/evaluador y rúbrica. Añadir ejercicios basados en hallazgos revisables y metas del usuario.
@@ -23,6 +25,8 @@ Validar hallazgos con Zod y citas/timestamps contra el texto. Rechazar evidencia
 Extender la máquina de estados a conversación dinámica: turnos, límites, cancelación, capturas por respuesta y repreguntas que citen contenido real. Mantener preguntas fijas como modo guiado explícito. No presentar reglas predefinidas como IA.
 
 ## P3: complementos y comparación
+
+La primera versión del análisis visual con MediaPipe está en el simulador de defensa (mirada, gestos, manos en la cara y postura). Falta validar sus umbrales con grabaciones reales consentidas y con distintas cámaras e iluminación.
 
 Análisis visual local opcional con MediaPipe y permisos de cámara separados, indicadores de movimiento sin inferencias psicológicas ni reconocimiento de identidad. Síntesis local opcional, sidecars whisper.cpp/llama.cpp con capacidades acotadas, optimización por plataforma y distribución nativa firmada.
 

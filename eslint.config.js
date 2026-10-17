@@ -7,6 +7,7 @@ export default ts.config(
       '**/dist/**',
       '**/target/**',
       '**/public/ort/**',
+      '**/public/mediapipe/**',
       '**/public/third-party/**',
       'playwright-report/**',
       'test-results/**',

@@ -30,6 +30,12 @@ Sin modelo: grabar, importar, analizar, escuchar, guardar, exportar, redactar tr
 
 SQLite guarda audio y metadata en una operación. La actualización de metadata conserva audio con COALESCE; eliminación borra una sola fila. UUID y límites se validan en Rust; SQL utiliza parámetros. Los esquemas completos del frontend se validan con Zod antes de persistir y al recuperar. Las rúbricas/preferencias/modelos del escritorio usan almacenamiento del WebView en esta etapa.
 
+## Simulador de defensa
+
+`packages/defense` no depende de la interfaz: extrae términos, genera preguntas y repreguntas por reglas, clasifica señales de rostro y postura, simula la atención del público, construye el informe y prepara y valida con Zod las respuestas JSON del modelo de lenguaje. Tiene pruebas con datos sintéticos.
+
+En la web, `DefenseEngine` toma micrófono y cámara, mide cada 100 ms (RMS, umbral de Preferencias, tono con la misma autocorrelación del DSP) y analiza la imagen cada 125 ms con MediaPipe. Cada segundo resume todo en un `Tick` con su fase: exposición, pregunta de la comisión o respuesta. El informe usa solo los ticks del estudiante. La grabación se mantiene en memoria y no se guarda en IndexedDB. La transcripción en vivo se pausa mientras habla la comisión para no transcribir su voz.
+
 ## PWA y distribución
 
 Build Vite produce assets y un Service Worker con manifiesto de tamaño/SHA-256 por recurso y caché versionado por hash del contenido. Preferencias ofrece preparación/actualización explícita. Instalación del worker no descarga el shell: solo una petición prepare verifica/reutiliza/descarga los recursos y cambia el marcador de la versión preparada al completar todos. Se conserva una versión estática anterior para chunks abiertos; no se tocan caches de modelos ni IndexedDB. Las rutas hash evitan necesidad de rewrite del servidor. ONNX usa un hilo WASM: no se exige COOP/COEP en Pages.

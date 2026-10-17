@@ -1,0 +1,14 @@
+{
+  "name": "@oratoria/defense",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@oratoria/core": "workspace:*",
+    "@oratoria/evaluation": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

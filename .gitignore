@@ -4,6 +4,7 @@ target/
 playwright-report/
 test-results/
 apps/web/public/ort/
+apps/web/public/mediapipe/
 models/downloads/
 *.log
 .DS_Store

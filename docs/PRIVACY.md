@@ -2,11 +2,11 @@
 
 ## Datos locales
 
-La captura usa solamente micrófono; no solicita cámara. Grabaciones originales, texto, métricas, objetivo y valoración se conservan en el dispositivo. Web: IndexedDB para sesiones/audio/chunks/rúbricas, CacheStorage para modelos y shell, localStorage para preferencias. Tauri: sesiones y audio en SQLite del directorio de datos de la aplicación; los demás datos en el WebView.
+El estudio y las prácticas escritas usan solamente micrófono. El simulador de defensa puede pedir además la cámara, si el usuario la activa. La imagen se analiza en el navegador con MediaPipe y no se envía ni se guarda, salvo la grabación que el usuario decide descargar. Grabaciones originales, texto, métricas, objetivo y valoración se conservan en el dispositivo. Web: IndexedDB para sesiones/audio/chunks/rúbricas, CacheStorage para modelos y shell, localStorage para preferencias. Tauri: sesiones y audio en SQLite del directorio de datos de la aplicación; los demás datos en el WebView.
 
 Al grabar se escriben chunks comprimidos temporales. Al terminar se ensamblan y retiran; descartar o desmontar limpia el draft. Un cierre abrupto del proceso puede dejar chunks huérfanos: no hay recuperación automática ni garbage collection entre pestañas en esta versión, para evitar borrar grabaciones activas de otra pestaña.
 
-No se implementan cuentas, sincronización, analytics, publicidad, reconocimiento de identidad, inferencia de emociones ni envío de datos de sesión a servidores. Bibliotecas JS, CSS y runtime WASM se incluyen en el build y se sirven desde el mismo origen.
+No se implementan cuentas, sincronización, analytics, publicidad, reconocimiento de identidad ni inferencia de emociones. Solo las dos opciones del simulador indicadas en la tabla envían datos de práctica a terceros, y únicamente cuando el usuario las activa. Los informes del simulador se guardan en localStorage del navegador (máximo 10). Bibliotecas JS, CSS y runtime WASM se incluyen en el build y se sirven desde el mismo origen.
 
 ## Conexiones
 
@@ -16,6 +16,9 @@ No se implementan cuentas, sincronización, analytics, publicidad, reconocimient
 | Descargar Whisper explícitamente                              | `huggingface.co` y hosts HTTPS de Hugging Face (`*.hf.co`, `*.huggingface.co`, `*.xethub.hf.co`) | GET de archivos de una revisión fijada; IP/metadatos de conexión; sin credenciales, referrer, audio o transcripción |
 | Abrir un enlace de procedencia                                | Sitio indicado en el enlace                                                                      | Navegación elegida por el usuario                                                                                   |
 | Grabar, DSP, editar, valorar, practicar, exportar             | Sin servicio externo                                                                             | Datos procesados localmente                                                                                         |
+| Descargar modelos de cámara explícitamente                    | `storage.googleapis.com`                                                                         | GET de dos archivos de MediaPipe e información normal de conexión. Sin imagen, audio ni texto                       |
+| Transcripción en vivo del simulador (opcional)                | Servicio de reconocimiento del navegador (Google en Chrome, Microsoft en Edge)                   | Audio del micrófono mientras el usuario expone o responde                                                           |
+| Comisión con IA del simulador (opcional)                      | Dirección configurada por el usuario (local con Ollama/LM Studio, o Gemini/OpenAI)               | Título, resumen, texto transcrito de la exposición y de las respuestas. La clave de API se guarda en localStorage   |
 | Desarrollo                                                    | Vite en localhost, incluyendo WebSocket HMR                                                      | Recursos locales de desarrollo                                                                                      |
 
 No hay actualizador Tauri remoto configurado. En PWA, preparar/actualizar el shell requiere una acción explícita y SHA-256 por recurso. Las comprobaciones del script pequeño del Service Worker pueden seguir el ciclo del navegador; la versión preparada del shell se conserva hasta terminar otra preparación. La CSP de producción permite origen propio, medios blob, workers propios y las familias de hosts de descarga. El worker de inferencia añade un bloqueo de fetch fuera del runtime propio. Este bloqueo no equivale a aislamiento total del equipo o protección frente a una extensión maliciosa.

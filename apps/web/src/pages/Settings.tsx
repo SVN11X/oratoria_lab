@@ -201,13 +201,20 @@ export function Settings() {
           <h2>Qué sale de tu dispositivo</h2>
           <p>
             Durante la práctica, audio y texto se procesan localmente. El alojamiento recibe solicitudes de la
-            interfaz. Solo al pulsar descargar un modelo se contacta con Hugging Face y sus hosts de archivos.
-            Los enlaces de procedencia abren sitios externos por tu elección.
+            interfaz. Solo al pulsar descargar un modelo se contacta con Hugging Face (Whisper) o con Google
+            (modelos de cámara). Los enlaces de procedencia abren sitios externos por tu elección.
+          </p>
+          <p>
+            El simulador de defensa tiene dos conexiones opcionales que tú activas. La transcripción en vivo
+            usa el reconocimiento de voz del navegador: en Chrome y Edge el audio lo procesan Google o
+            Microsoft. La comisión con IA envía el texto de tu exposición y de tus respuestas al servicio que
+            configures; con Ollama o LM Studio ese texto no sale de tu equipo. La imagen de la cámara nunca
+            sale del dispositivo.
           </p>
           <p className="caption">
-            No se incluyen analítica, telemetría, fuentes remotas ni servicios de inferencia. Las
-            exportaciones contienen datos de la sesión y deben conservarse donde tú elijas. La evaluación
-            semántica mediante LLM y el cifrado de exportaciones no están implementados.
+            No se incluyen analítica, telemetría ni fuentes remotas. Las exportaciones contienen datos de la
+            sesión y deben conservarse donde tú elijas. La evaluación con IA solo existe, de forma opcional,
+            en el simulador de defensa. El cifrado de exportaciones ordinarias no está implementado.
           </p>
         </div>
       </section>

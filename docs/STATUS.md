@@ -2,6 +2,23 @@
 
 Entrega 0.1.0 actualizada tras el reset; trabajo realizado el 12–13 de octubre de 2026. Núcleo P0 web y parte de P1 implementados. La base nativa está preparada; no se declara una aplicación de escritorio compilada o validada en hardware.
 
+## Simulador de defensa (17 de octubre de 2026)
+
+Se añadió el paquete `@oratoria/defense`, la pantalla `#/defense`, el análisis de cámara con MediaPipe y la comisión con IA opcional. Comprobaciones ejecutadas en este entorno:
+
+| Comprobación                                | Resultado real                                                | Alcance                                                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm check`                                | Correcto, código de salida 0                                  | Lint, typecheck, **70 pruebas en 6 archivos** (55 anteriores y 15 nuevas del simulador), build y `verify:build`                                                                                                  |
+| `pnpm format:check`                         | Correcto                                                      | Código y documentación                                                                                                                                                                                           |
+| `pnpm audit --json`                         | 0 advisories en 337 dependencias                              | Según el registro, no equivale a auditoría completa                                                                                                                                                              |
+| Validación del build                        | 86 recursos, 68.603.240 bytes (65,43 MiB)                     | Incluye el WASM SIMD de MediaPipe (unos 11 MB) para el uso offline                                                                                                                                               |
+| Playwright en Chromium 1194                 | 9 de 9 recorridos funcionan, incluido el nuevo del simulador  | Cámara y micrófono simulados por Chromium. La prueba de pantalla vacía falla solo en su comprobación de red porque se sirvió en `127.0.0.1` y la prueba espera `localhost`; todas sus solicitudes fueron locales |
+| axe (WCAG 2.2 AA)                           | Sin violaciones                                               | Preparación del simulador y Modelos locales en modo claro y oscuro, sala durante una pregunta e informe                                                                                                          |
+| Motor de MediaPipe con la CSP de producción | El WASM local carga y procesa un modelo                       | Con un modelo falso a propósito, porque este entorno no accede a `storage.googleapis.com`                                                                                                                        |
+| Revisión visual                             | Capturas a 1440, 1024 y 360 px, sin desplazamiento horizontal | Preparación, sala, exposición, informe y Modelos locales                                                                                                                                                         |
+
+Pendiente de verificar en un equipo real: descarga de los modelos de cámara y sus mediciones con una persona frente a la cámara, transcripción en vivo de Chrome y Edge (en Chromium sin interfaz se detiene con `audio-capture`), voces del sistema, conexión con Ollama, Gemini u OpenAI y calidad de sus preguntas, y grabaciones largas. Los umbrales del informe son referencias razonables para practicar, no valores validados con evaluadores.
+
 ## Comprobaciones ejecutadas
 
 | Comprobación                       | Resultado real                                                                                               | Alcance                                                                                                         |
@@ -40,6 +57,7 @@ Se conservó el proyecto existente. Se añadió copia completa por sesión con a
 | Modelos                    | Catálogo fijado, tamaños, SHA-256, descarga/cancelación/borrado                                          | Metadatos oficiales consultados y hashes JSON calculados; SHA unitario probado. Descarga real desde UI/CORS/CacheStorage pendiente              |
 | Rúbricas/evaluación        | Seis bases, edición/versiones, citas y justificación, cobertura                                          | Reglas matemáticas y validación probadas; valoración humana, sin IA semántica                                                                   |
 | Práctica guiada            | Seis bancos, contexto, orden por nivel y máquina de estados                                              | Reducer probado; captura escrita; no conversación dinámica con LLM                                                                              |
+| Simulador de defensa       | Comisión y público SVG, interrupciones, repreguntas, IA opcional, cámara MediaPipe, informe e historial  | 15 pruebas unitarias, recorrido Playwright y axe con medios simulados; cámara, reconocimiento y voces reales pendientes                         |
 | Dashboard                  | Tres indicadores reales, mismo umbral para pausas y tablas                                               | Compilado; revisión visual/interacciones de ECharts pendiente                                                                                   |
 | Exportaciones              | TXT/JSON/CSV/original, métodos y diccionario, defensa de fórmulas CSV                                    | Serialización y protección CSV probadas; descarga del navegador/WebView requiere E2E                                                            |
 | Copias completas/cifradas  | Audio original, datos/revisiones/rúbrica, AES-256-GCM/PBKDF2 y restauración como sesión nueva            | 15 tests adicionales: bytes exactos, cifrado/descifrado, contraseña errónea, corrupción, límites y persistencia emulada; UI/WebView aún sin E2E |
@@ -55,7 +73,7 @@ Los codecs, micrófonos, interrupciones, múltiples pestañas, cuotas reales y l
 
 Las transcripciones manuales y ASR requieren revisión contra lo hablado. Una pausa, tono, ritmo o candidato léxico no determina capacidad, confianza ni emoción. La conversión mono puede cancelar canales en oposición de fase; F0 puede estimar sonidos periódicos no vocales. No hay calibración física de volumen ni cifras de precisión ASR/corpora regionales.
 
-No se implementaron LLM, repreguntas semánticas, MediaPipe, síntesis, PDF, cifrado en reposo, backup global del dispositivo, recuperación de drafts abruptos, sincronización ni comparación longitudinal automática de rúbricas. No hay pruebas comparativas contra Yoodli. Los modelos pesados, node_modules, cachés y builds no forman parte del ZIP de código.
+Fuera del simulador de defensa no se implementaron LLM, repreguntas semánticas ni MediaPipe. Tampoco síntesis propia, PDF, cifrado en reposo, backup global del dispositivo, recuperación de drafts abruptos, sincronización ni comparación longitudinal automática de rúbricas. No hay pruebas comparativas contra Yoodli. Los modelos pesados, node_modules, cachés y builds no forman parte del ZIP de código.
 
 ## Siguiente etapa
 

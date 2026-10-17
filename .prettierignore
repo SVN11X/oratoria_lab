@@ -5,5 +5,6 @@ target
 playwright-report
 test-results
 apps/web/public/ort
+apps/web/public/mediapipe
 apps/web/public/third-party
 docs/third-party

@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   ArrowUpRight,
+  Presentation,
 } from 'lucide-react';
 import { usePreferences, useSessions } from './state';
 import { Alert } from './components';
@@ -23,6 +24,7 @@ const Studio = lazy(() => import('./pages/Studio').then((m) => ({ default: m.Stu
 const HistoryPage = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
 const SessionPage = lazy(() => import('./pages/Session').then((m) => ({ default: m.SessionPage })));
 const Practice = lazy(() => import('./pages/Practice').then((m) => ({ default: m.Practice })));
+const DefensePage = lazy(() => import('./pages/Defense').then((m) => ({ default: m.Defense })));
 const Rubrics = lazy(() => import('./pages/Rubrics').then((m) => ({ default: m.Rubrics })));
 const Models = lazy(() => import('./pages/Models').then((m) => ({ default: m.Models })));
 const Preferences = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
@@ -31,6 +33,7 @@ const links = [
   { path: '/studio', name: 'Estudio de grabación', icon: Mic },
   { path: '/history', name: 'Mis sesiones', icon: History },
   { path: '/practice', name: 'Prácticas guiadas', icon: BookOpen },
+  { path: '/defense', name: 'Simulador de defensa', icon: Presentation },
   { path: '/rubrics', name: 'Rúbricas', icon: ListChecks },
   { path: '/models', name: 'Modelos locales', icon: Cpu },
   { path: '/settings', name: 'Preferencias', icon: Settings },
@@ -78,13 +81,15 @@ function Shell() {
         </button>
         <span className="nav-label">TU LABORATORIO</span>
         <nav aria-label="Navegación principal">
-          {links.map((l, i) => (
+          {links.map((l) => (
             <NavLink
               key={l.path}
               to={l.path}
               end={l.path === '/'}
               onClick={() => setOpen(false)}
-              className={({ isActive }) => `${isActive ? 'active ' : ''}${i === 5 ? 'nav-divider' : ''}`}
+              className={({ isActive }) =>
+                `${isActive ? 'active ' : ''}${l.path === '/models' ? 'nav-divider' : ''}`
+              }
             >
               <l.icon size={19} />
               <span>{l.name}</span>
@@ -150,6 +155,7 @@ function Shell() {
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/session/:id" element={<SessionPage />} />
               <Route path="/practice" element={<Practice />} />
+              <Route path="/defense" element={<DefensePage />} />
               <Route path="/rubrics" element={<Rubrics />} />
               <Route path="/models" element={<Models />} />
               <Route path="/settings" element={<Preferences />} />

@@ -11,6 +11,7 @@ import {
 import { errorMessage } from '@oratoria/core';
 import { basePath } from '../services';
 import { PageHead, Alert, Confirm } from '../components';
+import { VisionPanel, LlmPanel } from '../defense/panels';
 export function Models() {
   const [available, setAvailable] = useState(false),
     [verified, setVerified] = useState(false),
@@ -86,7 +87,7 @@ export function Models() {
       <PageHead
         eyebrow="MODELOS LOCALES"
         title="Instala solo lo que necesitas."
-        description="Grabar y analizar audio no requiere modelos. Whisper añade transcripción local en español."
+        description="Grabar y analizar audio no requiere modelos. Whisper transcribe tus grabaciones, MediaPipe permite medir tu lenguaje corporal y un modelo de lenguaje opcional da vida a la comisión del simulador de defensa."
       />
       {error && <Alert>{error}</Alert>}
       {status && (
@@ -189,12 +190,15 @@ export function Models() {
           </div>
         </div>
       </section>
+      <VisionPanel />
+      <LlmPanel />
       <section className="panel">
-        <h2>Capacidades futuras</h2>
+        <h2>Voz de la comisión</h2>
         <p>
-          Evaluación con LLM, análisis visual y síntesis de voz siguen pendientes. Las prácticas actuales
-          utilizan preguntas fijas y las rúbricas se valoran manualmente. No hay un modelo descargado para
-          esas capacidades.
+          El simulador de defensa usa las voces en español que ya trae tu sistema operativo o navegador, así
+          que no hay nada que descargar. En Windows puedes añadir más voces en Configuración, Hora e idioma,
+          Voz. En Edge aparecen además voces «Online (Natural)» de Microsoft, que se generan en sus
+          servidores.
         </p>
       </section>
       {deleting && (
