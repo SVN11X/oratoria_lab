@@ -1,0 +1,13 @@
+{
+  "name": "@oratoria/knowledge",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@oratoria/defense": "workspace:*",
+    "fflate": "0.8.3"
+  }
+}

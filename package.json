@@ -53,6 +53,8 @@
     "@oratoria/export": "workspace:*",
     "@oratoria/model-manager": "workspace:*",
     "@oratoria/transcription": "workspace:*",
-    "@oratoria/defense": "workspace:*"
+    "@oratoria/defense": "workspace:*",
+    "@oratoria/conversation": "workspace:*",
+    "@oratoria/knowledge": "workspace:*"
   }
 }
