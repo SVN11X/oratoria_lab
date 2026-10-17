@@ -30,7 +30,7 @@ export function decodeXml(s: string): string {
 }
 const clean = (s: string) =>
   s
-    .replace(/[ \t ]+/g, ' ')
+    .replace(/[ \t\u00a0]+/g, ' ')
     .replace(/\s*\n\s*/g, '\n')
     .trim();
 
