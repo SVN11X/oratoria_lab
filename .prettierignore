@@ -8,3 +8,5 @@ apps/web/public/ort
 apps/web/public/mediapipe
 apps/web/public/third-party
 docs/third-party
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/Cargo.lock

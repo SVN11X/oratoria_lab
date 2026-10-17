@@ -140,7 +140,7 @@ test('copia completa restaura audio y crea una sesión adicional', async ({ page
     .setInputFiles({ name: file.suggestedFilename(), mimeType: 'application/json', buffer });
   await expect(page.getByRole('button', { name: 'Guardar como sesión nueva' })).toBeEnabled();
   await page.getByRole('button', { name: 'Guardar como sesión nueva' }).click();
-  await expect(page.getByRole('status')).toContainText('Copia restaurada');
+  await expect(page.getByRole('status').filter({ hasText: 'Copia restaurada' })).toBeVisible();
   await expect(page.locator('.session-description')).toHaveCount(2);
   await page.getByRole('link', { name: 'Abrir sesión', exact: true }).click();
   await expect(page.getByLabel('Reproducir grabación')).toBeVisible();
