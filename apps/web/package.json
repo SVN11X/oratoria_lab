@@ -27,6 +27,8 @@
     "@huggingface/transformers": "3.8.1",
     "@mediapipe/tasks-vision": "0.10.35",
     "@oratoria/conversation": "workspace:*",
-    "@oratoria/knowledge": "workspace:*"
+    "@oratoria/knowledge": "workspace:*",
+    "pdfjs-dist": "6.3.289",
+    "fflate": "0.8.3"
   }
 }

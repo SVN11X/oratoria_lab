@@ -234,12 +234,10 @@ function ruleEvaluate(c: CriterionDef, s: EngineSnapshot): RuleOut {
         observed: contradictions.length
           ? `${contradictions.length} cifras dichas no coinciden con el material: ${contradictions.map((c) => `${c.said} frente a ${c.source} (${c.location})`).join('; ')}.`
           : 'No se detectaron cifras contradictorias con el material. La comparación solo cubre cifras con unidad.',
-        evidence: contradictions
-          .slice(0, 2)
-          .map((c) => ({
-            kind: 'medicion' as const,
-            text: `Dijo ${c.said}; el material indica ${c.source} (${c.location}).`,
-          })),
+        evidence: contradictions.slice(0, 2).map((c) => ({
+          kind: 'medicion' as const,
+          text: `Dijo ${c.said}; el material indica ${c.source} (${c.location}).`,
+        })),
         methodText:
           'Comparación de cifras con unidad entre respuestas y fragmentos del material sobre el mismo asunto.',
       };

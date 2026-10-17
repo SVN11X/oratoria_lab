@@ -1,4 +1,5 @@
 import { countHedges, normalize, STOP_WORDS, words } from '@oratoria/defense';
+import { numericClaims, stem, type NumericClaim } from '@oratoria/knowledge';
 import type { AnswerAnalysis, AnswerType, RetrievedChunk, ScenarioId } from './types';
 
 /** Palabras propias de las preguntas que no indican el tema. */
@@ -19,14 +20,7 @@ export function contentTerms(text: string): Set<string> {
   }
   return out;
 }
-/** Raíz muy simple para comparar formas como «resultado» y «resultados». */
-export function stem(w: string): string {
-  return w
-    .replace(/(amientos|imientos|aciones|uciones|amiento|imiento|mente)$/, '')
-    .replace(/(acion|ucion|ciones|cion|idad|ables|ibles|able|ible)$/, '')
-    .replace(/(es|s)$/, '')
-    .replace(/[aeo]$/, '');
-}
+export { stem };
 /** Similitud de Jaccard entre los términos de contenido de dos textos (0–1). */
 export function similarity(a: string, b: string): number {
   const A = contentTerms(a),
@@ -141,35 +135,7 @@ const SCENARIO_MARKERS: Record<ScenarioId, [string, RegExp][]> = {
   ],
 };
 
-export type NumericClaim = { value: number; unit: string; raw: string; context: Set<string> };
-const UNIT =
-  /^(%|por ?ciento|cm|mm|m|km|s|ms|seg|segundos|minutos|min|h|horas|hz|khz|mhz|ghz|kg|g|v|a|w|mw|kw|°|grados|db|fps|ppm|mb|gb|clp|usd|pesos|dolares|veces|personas|participantes|casos|muestras)$/;
-/** Cifras con su unidad y palabras cercanas, para comparar lo dicho con el material. */
-export function numericClaims(text: string): NumericClaim[] {
-  const t = fold(text).replace(/(\d)\s*%/g, '$1 %');
-  const tokens = t.split(/\s+/).filter(Boolean);
-  const out: NumericClaim[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const m = /^(\d+(?:[.,]\d+)?)[.,]?$/.exec(tokens[i]!);
-    if (!m) continue;
-    const value = Number(m[1]!.replace(',', '.'));
-    if (!Number.isFinite(value)) continue;
-    let unit = '';
-    const next = (tokens[i + 1] ?? '').replace(/[.,]$/, '');
-    if (UNIT.test(next)) unit = next === 'por' || next.startsWith('por') ? '%' : next;
-    if (tokens[i + 1] === 'por' && tokens[i + 2]?.startsWith('ciento')) unit = '%';
-    if (!unit && value >= 1900 && value <= 2100) continue; // años
-    if (!unit) continue;
-    const ctx = new Set<string>();
-    for (let j = Math.max(0, i - 6); j <= Math.min(tokens.length - 1, i + 6); j++) {
-      if (j === i) continue;
-      const w = tokens[j]!.replace(/[.,]/g, '');
-      if (w.length >= 5 && !STOP_WORDS.has(w) && !/^\d/.test(w)) ctx.add(stem(w));
-    }
-    out.push({ value, unit, raw: `${m[1]} ${unit}`.trim(), context: ctx });
-  }
-  return out;
-}
+export { numericClaims, type NumericClaim };
 /**
  * Cifras dichas que no coinciden con ninguna cifra del material sobre el mismo asunto.
  * Es conservador: exige unidad igual, contexto compartido y una diferencia mayor al 10 %.

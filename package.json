@@ -55,6 +55,8 @@
     "@oratoria/transcription": "workspace:*",
     "@oratoria/defense": "workspace:*",
     "@oratoria/conversation": "workspace:*",
-    "@oratoria/knowledge": "workspace:*"
+    "@oratoria/knowledge": "workspace:*",
+    "pdfjs-dist": "6.3.289",
+    "fflate": "0.8.3"
   }
 }
