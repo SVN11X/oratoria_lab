@@ -613,7 +613,9 @@ export function Room({
           return;
         }
         const spoke = s.voicedSince(asking.current.askedAt);
+        // Con respuestas escritas no se avanza por silencio: la persona puede estar escribiendo.
         if (
+          stt.current &&
           setup.autoEnd > 0 &&
           spoke >= 2.5 &&
           l.silence >= setup.autoEnd &&
@@ -830,7 +832,7 @@ export function Room({
               {showText ? 'Ocultar subtítulos' : 'Mostrar subtítulos'}
             </button>
           </div>
-          {stage === 'respuesta' && (live?.silence ?? 0) >= 3 && setup.autoEnd > 0 && (
+          {stage === 'respuesta' && !!stt.current && (live?.silence ?? 0) >= 3 && setup.autoEnd > 0 && (
             <p className="caption" role="status">
               Si terminaste, la conversación sigue tras {setup.autoEnd} s de silencio.
             </p>

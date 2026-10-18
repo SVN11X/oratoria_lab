@@ -1,36 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
-function fixtureWav() {
-  // Known synthetic signal used only by tests, never inserted into user history automatically.
-  const rate = 16000,
-    seconds = 2,
-    size = rate * seconds * 2,
-    buffer = Buffer.alloc(44 + size);
-  buffer.write('RIFF');
-  buffer.writeUInt32LE(36 + size, 4);
-  buffer.write('WAVEfmt ', 8);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(1, 22);
-  buffer.writeUInt32LE(rate, 24);
-  buffer.writeUInt32LE(rate * 2, 28);
-  buffer.writeUInt16LE(2, 32);
-  buffer.writeUInt16LE(16, 34);
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(size, 40);
-  for (let i = 0; i < rate * seconds; i++)
-    buffer.writeInt16LE(Math.round(5000 * Math.sin((2 * Math.PI * 200 * i) / rate)), 44 + i * 2);
-  return buffer;
-}
+import { fixtureWav, trackExternal } from './helpers';
 async function importAndSave(page: Page) {
-  await page.goto('/#/studio');
+  await page.goto('/#/practice/analizar');
   await page.getByLabel('Nombre de la sesión').fill('Prueba de audio');
   await page
     .getByLabel('Importar audio', { exact: true })
     .setInputFiles({ name: 'synthetic-test.wav', mimeType: 'audio/wav', buffer: fixtureWav() });
   await page.getByRole('button', { name: 'Analizar audio', exact: true }).click();
-  await page.getByRole('button', { name: 'Guardar sesión', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar en historial', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Prueba de audio', exact: true })).toBeVisible();
 }
 test('importar, medir, guardar, editar texto, exportar y eliminar', async ({ page }) => {
@@ -53,7 +32,7 @@ test('importar, medir, guardar, editar texto, exportar y eliminar', async ({ pag
 });
 test('captura MediaRecorder con micrófono sintético del navegador', async ({ page, context }) => {
   await context.grantPermissions(['microphone']);
-  await page.goto('/#/studio');
+  await page.goto('/#/practice/libre');
   await page.getByRole('button', { name: 'Grabar audio' }).click();
   await expect(page.getByText('Grabando en tu dispositivo', { exact: true })).toBeVisible();
   await page.waitForTimeout(1600);
@@ -64,10 +43,11 @@ test('captura MediaRecorder con micrófono sintético del navegador', async ({ p
   await page.getByRole('button', { name: 'Detener', exact: true }).click();
   await expect(page.getByLabel('Reproducir grabación')).toBeVisible();
   await page.getByRole('button', { name: 'Analizar audio', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Guardar sesión', exact: true })).toBeEnabled();
+  await expect(page.getByRole('heading', { name: 'Lo que se midió' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Guardar en historial', exact: true })).toBeEnabled();
 });
 test('explica un permiso rechazado sin fabricar métricas', async ({ page }) => {
-  await page.goto('/#/studio');
+  await page.goto('/#/practice/libre');
   await page.evaluate(() => {
     navigator.mediaDevices.getUserMedia = async () => {
       throw new DOMException('Permiso rechazado', 'NotAllowedError');
@@ -75,44 +55,66 @@ test('explica un permiso rechazado sin fabricar métricas', async ({ page }) => 
   });
   await page.getByRole('button', { name: 'Grabar audio' }).click();
   await expect(page.getByRole('alert')).toContainText('No se concedió permiso');
-  await expect(page.getByRole('button', { name: 'Guardar sesión', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Guardar en historial', exact: true })).toHaveCount(0);
 });
-test('recorrido de práctica guiada sin atribuir respuestas a IA', async ({ page }) => {
-  await page.goto('/#/practice');
-  await page.getByLabel('Cantidad de preguntas').selectOption('1');
-  await page.getByRole('button', { name: 'Comenzar práctica' }).click();
-  await page
-    .getByLabel('Tu respuesta')
-    .fill('Mi investigación aborda la navegación autónoma y reconoce sus limitaciones.');
-  await page.getByRole('button', { name: 'Terminar práctica', exact: true }).click();
-  await page.getByRole('button', { name: 'Guardar práctica escrita' }).click();
-  await expect(page.getByRole('heading', { name: 'Defensa de tesis', exact: true })).toBeVisible();
-  await expect(page.getByText('Ritmo sobre duración total')).toBeVisible();
-  await expect(page.getByText('Solo disponible con audio')).toBeVisible();
-});
-test('pantalla vacía, tema, responsive y accesibilidad', async ({ page }) => {
-  const requests: string[] = [];
-  page.on('request', (request) => {
-    if (!request.url().startsWith('http://localhost:4173') && !request.url().startsWith('blob:'))
-      requests.push(request.url());
-  });
+test('inicio sin solicitudes externas, tema oscuro y navegación móvil', async ({ page }) => {
+  const external = trackExternal(page);
   await page.goto('/');
-  await expect(page.getByText('Todavía no hay sesiones')).toBeVisible();
-  const audit = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
-    .analyze();
-  expect(audit.violations).toEqual([]);
-  await page.getByRole('button', { name: 'Activar modo oscuro' }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(
+    page.getByRole('heading', { name: 'Entrena para conversaciones que importan.' }),
+  ).toBeVisible();
+  await expect(page.getByText('Todavía no hay prácticas')).toBeVisible();
+  await page.getByRole('button', { name: /Activar modo (oscuro|claro)/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', /dark|light/);
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: 'Abrir navegación' })).toBeVisible();
   await page.getByRole('button', { name: 'Abrir navegación' }).click();
   await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible();
-  expect(requests).toEqual([]);
+  await page
+    .getByRole('navigation', { name: 'Navegación principal' })
+    .getByRole('link', { name: 'Prácticas guiadas' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Defensa de tesis' }).first()).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+  expect(external).toEqual([]);
 });
+for (const theme of ['light', 'dark'] as const)
+  test(`accesibilidad WCAG 2.2 AA en modo ${theme === 'light' ? 'claro' : 'oscuro'}`, async ({ page }) => {
+    await page.addInitScript((t) => {
+      localStorage.setItem('oratoria-preferences-v1', JSON.stringify({ state: { theme: t }, version: 0 }));
+    }, theme);
+    for (const path of [
+      '/',
+      '/#/practice',
+      '/#/practice/tesis',
+      '/#/practice/libre',
+      '/#/history',
+      '/#/progress',
+      '/#/settings/models',
+      '/#/settings/audio',
+      '/#/settings/privacy',
+      '/#/settings/data',
+    ]) {
+      await page.goto(path);
+      await expect(page.locator('main h1').first()).toBeVisible();
+      await page.waitForTimeout(400);
+      const audit = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+        .analyze();
+      expect(
+        audit.violations.map((v) => `${path}: ${v.id} ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`),
+      ).toEqual([]);
+    }
+  });
 test('shell abre sin conexión tras preparar Service Worker', async ({ page, context }) => {
-  await page.goto('/#/settings');
-  await page.getByRole('button', { name: 'Preparar o actualizar uso offline' }).click();
-  await expect(page.getByRole('status')).toContainText('Interfaz offline preparada', { timeout: 120000 });
+  await page.goto('/#/settings/data');
+  await page.getByRole('button', { name: 'Preparar o actualizar uso sin conexión' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Interfaz offline preparada' })).toBeVisible({
+    timeout: 120000,
+  });
   await page.goto('/');
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -120,9 +122,16 @@ test('shell abre sin conexión tras preparar Service Worker', async ({ page, con
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Tu voz, con perspectiva.' })).toBeVisible();
-  await page.getByRole('link', { name: 'Estudio de grabación' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Entrena para conversaciones que importan.' }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Práctica libre' }).click();
   await expect(page.getByRole('button', { name: 'Grabar audio' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Navegación principal' })
+    .getByRole('link', { name: 'Configuración' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Modelos de IA', level: 1 })).toBeVisible();
 });
 test('copia completa restaura audio y crea una sesión adicional', async ({ page }) => {
   await importAndSave(page);

@@ -275,7 +275,7 @@ export function MaterialPanel({
           Configuración → Modelos de IA.
         </p>
       )}
-      {canCompare && !compact && (
+      {canCompare && (
         <div className="actions">
           <button className="button secondary" onClick={() => void compare()}>
             <GitCompare size={16} /> Comparar presentación con el documento

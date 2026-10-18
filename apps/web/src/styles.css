@@ -12,7 +12,7 @@
   --surface-3: #e4e7f0;
   --text: #141a2e;
   --muted: #4b5470;
-  --faint: #6b7390;
+  --faint: #5d6582;
   --border: #d9dde8;
   --border-strong: #b9bfd1;
   --primary: #3a3dd6;
@@ -320,8 +320,8 @@ svg {
   font-size: 12px;
   padding: 0 10px;
 }
-.mobile-close,
-.mobile-menu {
+.mobile-close.icon-button,
+.mobile-menu.icon-button {
   display: none;
 }
 .nav-backdrop {
@@ -1781,7 +1781,8 @@ details[open] > summary {
   display: flex;
   height: 34px;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--surface-2);
   border: 1px solid var(--border);
 }
@@ -1789,7 +1790,9 @@ details[open] > summary {
   border: 0;
   padding: 0;
   height: 100%;
-  min-width: 3px;
+  /* WCAG 2.2: objetivo táctil mínimo de 24 px. */
+  min-width: 24px;
+  flex-shrink: 0;
   border-right: 1px solid var(--surface);
 }
 .timeline-track .seg-user {
@@ -2300,8 +2303,8 @@ video.replay {
     transform: none;
     box-shadow: var(--shadow-lg);
   }
-  .mobile-close,
-  .mobile-menu {
+  .mobile-close.icon-button,
+  .mobile-menu.icon-button {
     display: inline-grid;
   }
   .mobile-close {

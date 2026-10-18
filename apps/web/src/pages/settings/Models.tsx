@@ -739,7 +739,6 @@ function InventoryPanel() {
                     <Trash2 size={15} /> Desinstalar
                   </button>
                 </div>
-                {jobs[pullKey(item.name)] && <JobProgress job={jobs[pullKey(item.name)]!} />}
               </article>
             );
           })}
@@ -1254,7 +1253,11 @@ function ManagedPanel() {
                     <span>Idioma: {m.language}</span>
                     <span>Revisión: {m.revision.slice(0, 12)}</span>
                     <span>{m.pinned ? 'Huellas SHA-256 fijadas' : 'Huella registrada al instalar'}</span>
-                    {inUse(m) && <span className="badge primary">En uso</span>}
+                    {inUse(m) && (
+                      <span className={`badge ${st?.installed ? 'primary' : 'warning'}`}>
+                        {st?.installed ? 'En uso' : 'Elegido, falta instalar'}
+                      </span>
+                    )}
                   </div>
                   <p className="caption">{m.quality}</p>
                   <div className="actions">
