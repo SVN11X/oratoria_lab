@@ -9,6 +9,8 @@
     "allow-list-sessions",
     "allow-get-session",
     "allow-read-audio",
-    "allow-delete-session"
+    "allow-delete-session",
+    "allow-system-info",
+    "allow-ollama-storage"
   ]
 }

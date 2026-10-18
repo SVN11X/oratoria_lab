@@ -52,10 +52,11 @@ const emptyAcc = (): Acc => ({
 });
 const avg = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
 /**
- * Captura micrófono y cámara, mide cada 100 ms y resume cada segundo en un Tick.
- * Todo el análisis ocurre en el navegador; la grabación queda en memoria hasta descargarla.
+ * Sensores de la práctica: captura micrófono y cámara, mide cada 100 ms y resume cada segundo en
+ * un Tick. Opcionalmente entrega PCM para transcribir en el equipo. Todo ocurre en el navegador;
+ * la grabación queda en memoria hasta que decidas guardarla o descargarla.
  */
-export class DefenseEngine {
+export class MediaSensors {
   readonly ticks: Tick[] = [];
   readonly onsets: number[] = [];
   phase: Phase | 'pausa' = 'pregunta';
@@ -78,6 +79,7 @@ export class DefenseEngine {
   private recorder: MediaRecorder | null = null;
   private parts: Blob[] = [];
   private stopped = false;
+  private capture: AudioWorkletNode | null = null;
   video: HTMLVideoElement | null = null;
   private constructor(
     readonly stream: MediaStream,
@@ -99,16 +101,31 @@ export class DefenseEngine {
     record: boolean;
     threshold: number;
     onLive: (s: LiveStats) => void;
-  }): Promise<{ engine: DefenseEngine; warning: string }> {
+    /** Recibe audio PCM para transcripción local. */
+    onPcm?: (frame: Float32Array, sampleRate: number, t: number) => void;
+    deviceId?: string;
+    cameraId?: string;
+  }): Promise<{ engine: MediaSensors; warning: string }> {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
       throw new Error('El simulador necesita HTTPS o localhost y un navegador con acceso al micrófono.');
-    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: false };
+    const audio = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: false,
+      ...(options.deviceId ? { deviceId: { exact: options.deviceId } } : {}),
+    };
     let stream: MediaStream,
       warning = '';
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio,
-        video: options.camera ? { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } : false,
+        video: options.camera
+          ? {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              ...(options.cameraId ? { deviceId: { exact: options.cameraId } } : { facingMode: 'user' }),
+            }
+          : false,
       });
     } catch (error) {
       if (!options.camera) throw permission(error);
@@ -119,7 +136,7 @@ export class DefenseEngine {
         throw permission(second);
       }
     }
-    const engine = new DefenseEngine(
+    const engine = new MediaSensors(
       stream,
       stream.getVideoTracks().length > 0,
       options.threshold,
@@ -127,9 +144,26 @@ export class DefenseEngine {
       options.onLive,
     );
     await engine.context.resume();
+    if (options.onPcm) await engine.startCapture(options.onPcm);
     engine.timer = setInterval(() => engine.frame(), 100);
     engine.liveTimer = setInterval(() => engine.emit(), 400);
     return { engine, warning };
+  }
+  private async startCapture(onPcm: (frame: Float32Array, sampleRate: number, t: number) => void) {
+    try {
+      await this.context.audioWorklet.addModule(
+        new URL('worklets/capture.js', new URL(import.meta.env.BASE_URL, location.href)).href,
+      );
+      const node = new AudioWorkletNode(this.context, 'oratoria-capture');
+      node.port.onmessage = (e: MessageEvent<Float32Array>) =>
+        onPcm(e.data, this.context.sampleRate, this.clock);
+      this.source.connect(node);
+      node.port.postMessage({ active: true });
+      this.capture = node;
+    } catch {
+      this.capture = null;
+      throw new Error('Este navegador no permite capturar audio para transcribir en el equipo.');
+    }
   }
   private startRecorder() {
     const withVideo = this.stream.getVideoTracks().length > 0;
@@ -319,6 +353,8 @@ export class DefenseEngine {
       recorder.onstop = () => resolve(new Blob(this.parts, { type: recorder.mimeType }));
       recorder.stop();
     });
+    this.capture?.port.postMessage({ active: false });
+    this.capture?.disconnect();
     this.stream.getTracks().forEach((t) => t.stop());
     this.source.disconnect();
     await this.context.close().catch(() => undefined);

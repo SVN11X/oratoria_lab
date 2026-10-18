@@ -8,6 +8,7 @@ export default ts.config(
       '**/target/**',
       '**/public/ort/**',
       '**/public/mediapipe/**',
+      '**/public/piper/**',
       '**/public/third-party/**',
       'playwright-report/**',
       'test-results/**',

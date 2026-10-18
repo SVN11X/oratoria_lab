@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
-const path = resolve(import.meta.dirname, '../apps/web/src/defense/vision-models.json');
+const path = resolve(import.meta.dirname, '../packages/model-manager/src/vision-models.json');
 const manifest = JSON.parse(await readFile(path, 'utf8'));
 for (const model of manifest.models) {
   const response = await fetch(model.url);

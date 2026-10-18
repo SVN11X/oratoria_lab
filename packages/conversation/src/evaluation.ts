@@ -469,11 +469,13 @@ export async function evaluateSession(input: {
   llm?: LlmPort | null;
   signal?: AbortSignal;
   chunks?: Parameters<typeof evaluationPrompt>[0]['chunks'];
+  /** Criterios activos con sus pesos; por defecto, los recomendados del escenario. */
+  criteria?: CriterionDef[];
 }): Promise<EvaluationResult> {
   const s = input.snapshot,
     scenario = SCENARIOS[s.scenario];
   const notes: string[] = [];
-  const criteria = scenario.criteria;
+  const criteria = input.criteria?.length ? input.criteria : scenario.criteria;
   let ai: ReturnType<typeof EvaluationSchema.parse> | null = null;
   let evaluatorModel: string | null = null;
   const aiCriteria = criteria.filter((c) => c.methods.includes('ia'));

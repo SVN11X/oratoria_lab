@@ -2,6 +2,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
+mod models;
+
 struct LocalStore(Mutex<Connection>);
 fn valid_id(id: &str) -> Result<(), String> {
     uuid::Uuid::parse_str(id).map(|_| ()).map_err(|_| "Identificador de sesión no válido".to_string())
@@ -57,6 +59,18 @@ async fn delete_session(state: State<'_, LocalStore>, id: String) -> Result<(), 
     Ok(())
 }
 
+/// Memoria, CPU y sistema operativo, para recomendar modelos con datos reales.
+#[tauri::command]
+async fn system_info() -> Result<models::SystemInfo, String> {
+    Ok(models::system_info())
+}
+/// Lee (sin modificar) los manifiestos de Ollama para calcular capas compartidas y el espacio real.
+#[tauri::command]
+async fn ollama_storage(app: tauri::AppHandle) -> Result<models::OllamaStorage, String> {
+    let roots = models::candidate_roots(std::env::var("OLLAMA_MODELS").ok(), app.path().home_dir().ok());
+    tauri::async_runtime::spawn_blocking(move || models::find_and_scan(&roots)).await.map_err(|e| e.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -73,7 +87,7 @@ pub fn run() {
             app.manage(LocalStore(Mutex::new(conn)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![save_session, list_sessions, get_session, read_audio, delete_session])
+        .invoke_handler(tauri::generate_handler![save_session, list_sessions, get_session, read_audio, delete_session, system_info, ollama_storage])
         .run(tauri::generate_context!())
         .expect("No se pudo iniciar Oratoria Lab");
 }

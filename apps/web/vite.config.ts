@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwind from '@tailwindcss/vite';
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -26,8 +26,12 @@ export default defineConfig({
         return context.server ? html.replace(/<meta\s+http-equiv="Content-Security-Policy"[^>]*>/, '') : html;
       },
       async closeBundle() {
-        const dist = resolve(import.meta.dirname, 'dist'),
-          all = await files(dist);
+        const dist = resolve(import.meta.dirname, 'dist');
+        // ONNX Runtime referencia su WASM junto al código, pero los trabajadores fijan wasmPaths en
+        // ./ort/. La copia duplicada (21 MB) nunca se descarga: se elimina del build y del manifiesto.
+        for (const file of await files(resolve(dist, 'assets')))
+          if (/ort-wasm-simd-threaded\.jsep-[\w-]+\.wasm$/.test(file)) await rm(file);
+        const all = await files(dist);
         const assets = all.filter((f) => !f.endsWith('sw.js') && !f.endsWith('.map'));
         const digest = createHash('sha256');
         for (const file of assets) digest.update(await readFile(file));

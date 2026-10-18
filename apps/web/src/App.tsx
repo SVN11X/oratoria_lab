@@ -1,55 +1,81 @@
 import { Component, Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
-import { HashRouter, NavLink, Route, Routes, useLocation, Link } from 'react-router-dom';
+import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
 import {
   AudioLines,
-  LayoutDashboard,
-  Mic,
-  History,
+  Home as HomeIcon,
   BookOpen,
-  ListChecks,
-  Cpu,
+  History,
+  TrendingUp,
   Settings,
-  ShieldCheck,
   Sun,
   Moon,
   Menu,
   X,
   ArrowUpRight,
-  Presentation,
+  ShieldCheck,
 } from 'lucide-react';
-import { usePreferences, useSessions } from './state';
+import { usePreferences, useSessions, effectiveTheme } from './state';
 import { Alert } from './components';
+import { useAi } from './ai/settings';
+import { useAiStatus } from './ai/status';
+
 const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })));
-const Studio = lazy(() => import('./pages/Studio').then((m) => ({ default: m.Studio })));
+const Practices = lazy(() => import('./pages/Practices').then((m) => ({ default: m.Practices })));
+const PracticeFlow = lazy(() => import('./pages/Practices').then((m) => ({ default: m.PracticeFlow })));
+const SavedReport = lazy(() => import('./pages/Practices').then((m) => ({ default: m.SavedReport })));
+const FreePractice = lazy(() => import('./pages/FreePractice').then((m) => ({ default: m.FreePractice })));
 const HistoryPage = lazy(() => import('./pages/History').then((m) => ({ default: m.History })));
 const SessionPage = lazy(() => import('./pages/Session').then((m) => ({ default: m.SessionPage })));
-const Practice = lazy(() => import('./pages/Practice').then((m) => ({ default: m.Practice })));
-const DefensePage = lazy(() => import('./pages/Defense').then((m) => ({ default: m.Defense })));
-const Rubrics = lazy(() => import('./pages/Rubrics').then((m) => ({ default: m.Rubrics })));
-const Models = lazy(() => import('./pages/Models').then((m) => ({ default: m.Models })));
-const Preferences = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
+const ProgressPage = lazy(() => import('./pages/Progress').then((m) => ({ default: m.Progress })));
+const SettingsPage = lazy(() => import('./pages/settings/Settings').then((m) => ({ default: m.Settings })));
+
 const links = [
-  { path: '/', name: 'Resumen', icon: LayoutDashboard },
-  { path: '/studio', name: 'Estudio de grabación', icon: Mic },
-  { path: '/history', name: 'Mis sesiones', icon: History },
+  { path: '/', name: 'Inicio', icon: HomeIcon },
   { path: '/practice', name: 'Prácticas guiadas', icon: BookOpen },
-  { path: '/defense', name: 'Simulador de defensa', icon: Presentation },
-  { path: '/rubrics', name: 'Rúbricas', icon: ListChecks },
-  { path: '/models', name: 'Modelos locales', icon: Cpu },
-  { path: '/settings', name: 'Preferencias', icon: Settings },
+  { path: '/history', name: 'Historial', icon: History },
+  { path: '/progress', name: 'Mi progreso', icon: TrendingUp },
+  { path: '/settings', name: 'Configuración', icon: Settings },
 ];
+const NAMES: [RegExp, string][] = [
+  [/^\/practice\/libre/, 'Práctica libre'],
+  [/^\/practice\/analizar/, 'Analizar grabación'],
+  [/^\/practice\/record/, 'Informe de práctica'],
+  [/^\/practice/, 'Prácticas guiadas'],
+  [/^\/history/, 'Historial'],
+  [/^\/session/, 'Análisis de grabación'],
+  [/^\/progress/, 'Mi progreso'],
+  [/^\/settings/, 'Configuración'],
+  [/^\/$/, 'Inicio'],
+];
+
 function Shell() {
   const [open, setOpen] = useState(false),
-    { theme, update } = usePreferences(),
+    { theme, update, fontSize, reducedMotion } = usePreferences(),
     reload = useSessions((s) => s.reload),
     location = useLocation();
+  const useLlm = useAi((s) => s.useLlm);
+  const status = useAiStatus();
+  const [systemDark, setSystemDark] = useState(
+    () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches,
+  );
   useEffect(() => {
     void reload();
   }, [reload]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-  const pageName = links.find((l) => l.path === location.pathname)?.name ?? 'Análisis de sesión';
+    if (typeof matchMedia === 'undefined') return;
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const on = () => setSystemDark(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const shown = theme === 'system' ? (systemDark ? 'dark' : 'light') : effectiveTheme(theme);
+  useEffect(() => {
+    document.documentElement.dataset.theme = shown;
+    document.documentElement.style.fontSize = `${fontSize}px`;
+    if (reducedMotion) document.documentElement.dataset.motion = 'reduce';
+    else delete document.documentElement.dataset.motion;
+  }, [shown, fontSize, reducedMotion]);
+  const pageName = NAMES.find(([rx]) => rx.test(location.pathname))?.[1] ?? 'Oratoria Lab';
   return (
     <div className="app-shell">
       <a
@@ -65,11 +91,11 @@ function Shell() {
       <aside id="sidebar" className={`sidebar ${open ? 'open' : ''}`}>
         <Link to="/" className="brand" onClick={() => setOpen(false)}>
           <span className="brand-mark">
-            <AudioLines size={27} />
+            <AudioLines size={24} />
           </span>
           <span>
-            oratoria<span className="brand-lab">lab</span>
-            <small>UN ESPACIO PARA TU VOZ</small>
+            Oratoria Lab
+            <small>ENTRENAMIENTO LOCAL</small>
           </span>
         </Link>
         <button
@@ -79,7 +105,6 @@ function Shell() {
         >
           <X size={22} />
         </button>
-        <span className="nav-label">TU LABORATORIO</span>
         <nav aria-label="Navegación principal">
           {links.map((l) => (
             <NavLink
@@ -87,26 +112,28 @@ function Shell() {
               to={l.path}
               end={l.path === '/'}
               onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `${isActive ? 'active ' : ''}${l.path === '/models' ? 'nav-divider' : ''}`
-              }
+              className={({ isActive }) => (isActive ? 'active' : '')}
             >
               <l.icon size={19} />
               <span>{l.name}</span>
-              {l.path === '/studio' && <span className="nav-dot" />}
             </NavLink>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="privacy-stamp">
-            <ShieldCheck size={23} />
-            <div>
-              <strong>Tu práctica es local</strong>
-              <small>Sin cuentas. Tú decides qué exportar.</small>
-            </div>
-          </div>
+          <Link to="/settings/models" className="ai-status" onClick={() => setOpen(false)}>
+            <strong>Estado de la IA</strong>
+            <span className="row">
+              <span className={`dot ${status.llm === 'ok' ? 'on' : status.llm === 'off' ? '' : 'warn'}`} />
+              {status.llmText}
+            </span>
+            <span className="row">
+              <span className={`dot ${status.stt === 'local' ? 'on' : 'warn'}`} />
+              {status.sttText}
+            </span>
+          </Link>
           <p>
-            Oratoria Lab <span>v0.1.0</span>
+            <ShieldCheck size={14} style={{ verticalAlign: '-2px' }} /> Sin cuentas ni telemetría.{' '}
+            {useLlm ? 'Modelos en tu equipo.' : 'Procesamiento local.'} v0.2.0
           </p>
         </div>
       </aside>
@@ -124,19 +151,20 @@ function Shell() {
               <Menu size={22} />
             </button>
             <span className="breadcrumb">
-              Mi laboratorio <span>/</span> <strong>{pageName}</strong>
+              Oratoria Lab / <strong>{pageName}</strong>
             </span>
           </div>
-          <div className="topbar-right">
+          <div className="topbar-right row-wrap">
             <span className="local-status">
-              <span className="dot" /> Procesamiento local
+              <span className={`dot ${status.llm === 'ok' ? 'on' : ''}`} />{' '}
+              {status.llm === 'ok' ? 'IA local conectada' : 'Procesamiento local'}
             </span>
             <button
               className="icon-button"
-              onClick={() => update({ theme: theme === 'light' ? 'dark' : 'light' })}
-              aria-label={theme === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
+              onClick={() => update({ theme: shown === 'light' ? 'dark' : 'light' })}
+              aria-label={shown === 'light' ? 'Activar modo oscuro' : 'Activar modo claro'}
             >
-              {theme === 'light' ? <Moon size={19} /> : <Sun size={19} />}
+              {shown === 'light' ? <Moon size={19} /> : <Sun size={19} />}
             </button>
           </div>
         </header>
@@ -145,27 +173,34 @@ function Shell() {
             fallback={
               <div className="page-loading" role="status">
                 <span className="spinner" />
-                Abriendo tu laboratorio…
+                Abriendo…
               </div>
             }
           >
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/studio" element={<Studio />} />
+              <Route path="/practice" element={<Practices />} />
+              <Route path="/practice/libre" element={<FreePractice mode="record" />} />
+              <Route path="/practice/analizar" element={<FreePractice mode="import" />} />
+              <Route path="/practice/record/:id" element={<SavedReport />} />
+              <Route path="/practice/:scenario" element={<PracticeFlow />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/session/:id" element={<SessionPage />} />
-              <Route path="/practice" element={<Practice />} />
-              <Route path="/defense" element={<DefensePage />} />
-              <Route path="/rubrics" element={<Rubrics />} />
-              <Route path="/models" element={<Models />} />
-              <Route path="/settings" element={<Preferences />} />
+              <Route path="/progress" element={<ProgressPage />} />
+              <Route path="/settings" element={<Navigate to="/settings/models" replace />} />
+              <Route path="/settings/:section" element={<SettingsPage />} />
+              {/* Rutas anteriores */}
+              <Route path="/defense" element={<Navigate to="/practice/tesis" replace />} />
+              <Route path="/studio" element={<Navigate to="/practice/libre" replace />} />
+              <Route path="/models" element={<Navigate to="/settings/models" replace />} />
+              <Route path="/rubrics" element={<Navigate to="/practice" replace />} />
               <Route
                 path="*"
                 element={
                   <>
                     <h1>Esta página no existe.</h1>
-                    <Link to="/" className="button primary">
-                      Volver al resumen <ArrowUpRight size={17} />
+                    <Link to="/" className="button primary" style={{ marginTop: 16 }}>
+                      Volver al inicio <ArrowUpRight size={17} />
                     </Link>
                   </>
                 }
@@ -173,8 +208,8 @@ function Shell() {
             </Routes>
           </Suspense>
           <footer className="footer">
-            <span>Práctica real. Datos explicables.</span>
-            <span>Diseñado para aprender a tu ritmo.</span>
+            <span>Oratoria Lab · entrenamiento local, privado y gratuito.</span>
+            <span>Las evaluaciones automáticas orientan; no reemplazan a tus profesores.</span>
           </footer>
         </main>
       </div>

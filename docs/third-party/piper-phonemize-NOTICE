@@ -1,0 +1,17 @@
+Componente de fonemas de Piper incluido en public/piper (piper_phonemize.wasm y piper_phonemize.data)
+y en el código del trabajador de voz (piper_phonemize.js).
+
+Origen: paquete npm @diffusionstudio/piper-wasm 1.0.0 (licencia declarada en package.json: MIT).
+Repositorio: https://github.com/diffusion-studio/piper-wasm
+
+Este binario WebAssembly compila piper-phonemize (MIT, https://github.com/rhasspy/piper-phonemize)
+junto con eSpeak NG (GPL-3.0-or-later, https://github.com/espeak-ng/espeak-ng) y sus datos de idioma.
+El texto completo de la GPL-3.0 está en espeak-ng-GPL-3.0. El código fuente correspondiente de
+eSpeak NG está disponible en su repositorio público indicado arriba.
+
+Oratoria Lab ejecuta este componente como un programa separado dentro de un Web Worker y se comunica
+con él solo mediante argumentos de línea de órdenes y salida de texto. Quien redistribuya Oratoria Lab
+con este componente debe cumplir la GPL-3.0 respecto de eSpeak NG.
+
+Las voces Piper no se incluyen: se descargan solo si la persona usuaria las instala, desde
+https://huggingface.co/rhasspy/piper-voices, y cada voz tiene su propia tarjeta de modelo y licencia.

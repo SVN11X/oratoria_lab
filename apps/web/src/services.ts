@@ -84,52 +84,36 @@ export async function processAudio(
     );
   });
 }
+/**
+ * Transcripción de una grabación completa con el modelo Whisper indicado (por defecto Tiny),
+ * con marcas de tiempo por segmento. Usa el mismo trabajador persistente que la práctica.
+ */
 export class WhisperTranscriber implements Transcriber {
+  constructor(private model = 'whisper-tiny') {}
   async transcribe(
     pcm: Float32Array,
-    language: string,
+    _language: string,
     signal: AbortSignal,
     progress: (p: TranscriptionProgress) => void,
   ) {
     validateTranscriptionInput(pcm);
     signal.throwIfAborted();
-    return new Promise<ReturnType<typeof parseWhisperResult>>((resolve, reject) => {
-      const worker = new Worker(new URL('./workers/transcription.ts', import.meta.url), { type: 'module' });
-      const cleanup = () => {
-        worker.terminate();
-        signal.removeEventListener('abort', abort);
-      };
-      const abort = () => {
-        cleanup();
-        reject(new DOMException('Transcripción cancelada.', 'AbortError'));
-      };
-      signal.addEventListener('abort', abort, { once: true });
-      worker.onmessage = (
-        e: MessageEvent<{
-          phase?: TranscriptionProgress['phase'];
-          message: string;
-          error?: string;
-          result?: unknown;
-        }>,
-      ) => {
-        if (e.data.error) {
-          cleanup();
-          reject(new Error(e.data.error));
-        } else if (e.data.result) {
-          cleanup();
-          try {
-            resolve(parseWhisperResult(e.data.result, pcm.length / 16000));
-          } catch (err) {
-            reject(err);
-          }
-        } else if (e.data.phase) progress({ phase: e.data.phase, message: e.data.message });
-      };
-      worker.onerror = () => {
-        cleanup();
-        reject(new Error('No se pudo iniciar Whisper en este navegador.'));
-      };
-      const copy = pcm.slice();
-      worker.postMessage({ pcm: copy, language, base: basePath }, [copy.buffer]);
-    });
+    progress({ phase: 'loading', message: 'Cargando el modelo verificado de este equipo…' });
+    const { whisperCall, releaseWhisper } = await import('./voice/stt');
+    const abort = () => releaseWhisper();
+    signal.addEventListener('abort', abort, { once: true });
+    try {
+      progress({
+        phase: 'processing',
+        message: 'Transcribiendo en este equipo. La duración depende del computador.',
+      });
+      const r = await whisperCall(this.model, pcm, true);
+      signal.throwIfAborted();
+      if (!r.ok) throw new Error(r.error ?? 'Falló la transcripción local.');
+      const transcript = parseWhisperResult(r.result, pcm.length / 16000);
+      return { ...transcript, model: this.model };
+    } finally {
+      signal.removeEventListener('abort', abort);
+    }
   }
 }

@@ -20,9 +20,10 @@ import {
 } from '@oratoria/evaluation';
 import { store, rubricStore } from '@oratoria/storage';
 import { downloadBlob, exportSession } from '@oratoria/export';
-import { modelAvailable } from '@oratoria/model-manager';
+import { managed } from '@oratoria/model-manager';
+import { bestWhisper } from '../practice/engines';
 import { PageHead, Metric, Alert, Empty, Chart, AudioPlayer, Confirm } from '../components';
-import { basePath, processAudio, WhisperTranscriber } from '../services';
+import { processAudio, WhisperTranscriber } from '../services';
 import { usePreferences, useSessions } from '../state';
 import { BackupExport } from '../BackupControls';
 export function SessionPage() {
@@ -41,7 +42,7 @@ function SessionView({ id }: { id: string }) {
     [rubrics, setRubrics] = useState<Rubric[]>(INITIAL_RUBRICS),
     [rubricKey, setRubricKey] = useState('general@1');
   const [ratings, setRatings] = useState<Rating[]>([]),
-    [installed, setInstalled] = useState(false),
+    [installed, setInstalled] = useState<string | null>(null),
     [deleting, setDeleting] = useState(false),
     [replaceTranscript, setReplaceTranscript] = useState(false);
   const [threshold, setThreshold] = useState(-38),
@@ -53,7 +54,7 @@ function SessionView({ id }: { id: string }) {
     fillers = usePreferences((s) => s.fillers);
   useEffect(() => {
     alive.current = true;
-    void Promise.all([store.get(id), store.audio(id), rubricStore.list(), modelAvailable(basePath)])
+    void Promise.all([store.get(id), store.audio(id), rubricStore.list(), bestWhisper()])
       .then(([data, audio, savedRubrics, available]) => {
         if (!alive.current) return;
         if (!data) {
@@ -185,9 +186,14 @@ function SessionView({ id }: { id: string }) {
         session.source === 'microphone',
         abort.current.signal,
       );
-      const transcript = await new WhisperTranscriber().transcribe(pcm, 'es', abort.current.signal, (p) => {
-        if (alive.current) setStatus(p.message);
-      });
+      const transcript = await new WhisperTranscriber(installed ?? 'whisper-tiny').transcribe(
+        pcm,
+        'es',
+        abort.current.signal,
+        (p) => {
+          if (alive.current) setStatus(p.message);
+        },
+      );
       transcript.revision = (session.transcript?.revision ?? 0) + 1;
       if (!transcript.segments.some((s) => s.text.trim()))
         throw new Error('Whisper no reconoció texto. Escucha el audio y prueba una transcripción manual.');
@@ -467,10 +473,10 @@ function SessionView({ id }: { id: string }) {
                     }
                     disabled={busy}
                   >
-                    <Sparkles size={17} /> Transcribir con Whisper
+                    <Sparkles size={17} /> Transcribir con {managed(installed)?.name ?? 'Whisper'}
                   </button>
                 ) : (
-                  <Link className="button secondary" to="/models">
+                  <Link className="button secondary" to="/settings/models">
                     Instalar Whisper local
                   </Link>
                 ))}

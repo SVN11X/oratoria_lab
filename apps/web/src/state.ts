@@ -21,23 +21,39 @@ export const useSessions = create<{
     }
   },
 }));
+type Prefs = {
+  theme: 'light' | 'dark' | 'system';
+  threshold: number;
+  fillers: string[];
+  goal: string;
+  /** Micrófono elegido (id del dispositivo); vacío = predeterminado. */
+  micId: string;
+  /** Cámara elegida; vacío = predeterminada. */
+  cameraId: string;
+  /** Tamaño base del texto, en píxeles. */
+  fontSize: 15 | 16 | 18;
+  reducedMotion: boolean;
+};
 export const usePreferences = create(
-  persist<{
-    theme: 'light' | 'dark';
-    threshold: number;
-    fillers: string[];
-    goal: string;
-    update: (
-      data: Partial<{ theme: 'light' | 'dark'; threshold: number; fillers: string[]; goal: string }>,
-    ) => void;
-  }>(
+  persist<Prefs & { update: (data: Partial<Prefs>) => void }>(
     (set) => ({
-      theme: 'light',
+      theme: 'system',
       threshold: -38,
       fillers: DEFAULT_FILLERS,
       goal: '',
+      micId: '',
+      cameraId: '',
+      fontSize: 15,
+      reducedMotion: false,
       update: (data) => set(data),
     }),
     { name: 'oratoria-preferences-v1' },
   ),
 );
+/** Tema efectivo: el elegido o el del sistema operativo. */
+export function effectiveTheme(theme: Prefs['theme']): 'light' | 'dark' {
+  if (theme !== 'system') return theme;
+  return typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
+}

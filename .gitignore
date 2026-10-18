@@ -5,6 +5,7 @@ playwright-report/
 test-results/
 apps/web/public/ort/
 apps/web/public/mediapipe/
+apps/web/public/piper/
 models/downloads/
 *.log
 .DS_Store
