@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAi } from './settings';
 import { ollama } from './llm';
+import { browserSttSupported } from '../voice/stt';
 
 export type AiStatus = {
   llm: 'ok' | 'off' | 'error' | 'missing';
@@ -60,10 +61,12 @@ export function useAiStatus(): AiStatus {
         : llm === 'missing'
           ? 'Falta asignar un modelo'
           : 'Ollama no responde';
+  const noBrowser = sttEngine === 'navegador' && !browserSttSupported();
   const stt: AiStatus['stt'] =
-    sttEngine === 'escrito' ? 'escrito' : sttEngine === 'navegador' ? 'online' : 'local';
-  const sttText =
-    stt === 'escrito'
+    sttEngine === 'escrito' || noBrowser ? 'escrito' : sttEngine === 'navegador' ? 'online' : 'local';
+  const sttText = noBrowser
+    ? 'Sin reconocimiento de voz: respuestas escritas'
+    : stt === 'escrito'
       ? 'Respuestas escritas'
       : stt === 'online'
         ? 'Voz: reconocimiento del navegador'

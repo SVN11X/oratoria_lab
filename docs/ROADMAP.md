@@ -1,33 +1,31 @@
-# Roadmap verificable
+# Próximos pasos
 
-## P0: cerrar validación de la base implementada
+Prioridades ordenadas según lo que falta verificar o construir después de la versión 0.2.0. El estado actual está en [STATUS](STATUS.md).
 
-La grabación/importación/DSP/persistencia/historial/exportación y la configuración Tauri están implementadas. Antes de considerar soportado un dispositivo, ejecutar los ocho E2E, comprobar micrófono real, desconexión, permisos, pausa, codecs, almacenamiento lleno y recarga offline. Compilar/probar SQLite e IPC en Windows/macOS/Linux y conservar Cargo.lock.
+## 1. Validar con componentes reales
 
-Validar móvil y accesibilidad con lector de pantalla, zoom y teclado; axe no sustituye esa revisión. Medir RAM de captura/decodificación además del benchmark DSP. Considerar recuperación de drafts huérfanos con ownership/heartbeat por pestaña antes de introducir limpieza automática.
+- Conectar Ollama real: inventario, descarga, sustitución y desinstalación, comparando el espacio liberado en web y escritorio.
+- Instalar Whisper Base y Small y medir errores de transcripción con voces de distintas regiones, ruido y respuestas largas, sobre grabaciones consentidas.
+- Escuchar las cinco voces Piper y elegir las más naturales para cada temperamento.
+- Probar MediaPipe con distintas cámaras, luz y distancias para ajustar los umbrales de mirada y postura.
+- Compilar y probar el escritorio en Windows y macOS, incluido micrófono y cámara del WebView.
 
-## P1: comprobar transcripción y mejorar trazabilidad
+## 2. Calidad de la evaluación
 
-El editor, conteos, rúbricas/manual-evidence, catálogo e integración Whisper están implementados. Verificar una instalación real, errores y cancelación en los navegadores, preparación offline, fallos de CORS/red y CacheStorage del WebView. Evaluar español de distintas regiones, nombres/números, silencio, ruido y duración larga; documentar WER/CER sobre corpus consentido y condiciones.
+- Calibrar los umbrales de los criterios con evaluadores humanos y documentar la concordancia.
+- Medir la calidad de las preguntas de cada modelo local con un conjunto fijo de tesis ficticias.
+- Agregar un reranker local opcional si mejora la precisión de las citas de forma medible.
 
-Las copias por sesión ya incluyen audio y datos, restauración validada con vista previa y cifrado opcional. Comprobar sus dos nuevos recorridos E2E y su interoperabilidad entre navegador/WebView, errores de cuota y cancelación con archivos grandes. La prueba de cifrado/descifrado y audio exacto en Node no acredita esa compatibilidad de interfaz.
+## 3. Experiencia
 
-Mejorar registro de revisiones y procedencia de texto editado, comparación de rúbricas con idéntica versión/cobertura/tarea y perfil de audio/canal. Incorporar copias globales de sesiones/rúbricas/preferencias y PDF cuando exista un motor real verificable. Preferir streaming/WebCodecs antes de ampliar los límites de archivo y memoria.
+- Avatares 3D con licencia compatible y blendshapes faciales, conectados a la interfaz `AvatarHandle` existente.
+- Voces con más expresividad cuando exista un motor local verificable.
+- Informe exportable a PDF.
+- Práctica diapositiva por diapositiva con la presentación cargada.
 
-## P2: evaluación y conversación con modelos locales
+## 4. Distribución
 
-El simulador de defensa ya incluye una primera versión: preguntas, repreguntas, interrupciones y comentario de contenido con un servicio compatible con OpenAI configurado por el usuario, con respaldo por reglas. Falta un modelo instalable dentro de la app y validar la calidad de las preguntas con evaluadores humanos.
+- Firmar binarios de escritorio y publicar versiones.
+- Interfaz móvil optimizada para practicar respuestas cortas.
 
-Introducir LLM compatible/licenciado con instalación explícita, catálogo verificable, estimación de memoria y fallback claro. Iniciar con un backend realmente ejecutable y probado; después WebLLM o llama.cpp según plataforma. No añadir Ollama como requisito.
-
-Validar hallazgos con Zod y citas/timestamps contra el texto. Rechazar evidencias inexistentes. Separar hallazgo interpretativo de cálculo; registrar modelo, cuantización, prompt/evaluador y rúbrica. Añadir ejercicios basados en hallazgos revisables y metas del usuario.
-
-Extender la máquina de estados a conversación dinámica: turnos, límites, cancelación, capturas por respuesta y repreguntas que citen contenido real. Mantener preguntas fijas como modo guiado explícito. No presentar reglas predefinidas como IA.
-
-## P3: complementos y comparación
-
-La primera versión del análisis visual con MediaPipe está en el simulador de defensa (mirada, gestos, manos en la cara y postura). Falta validar sus umbrales con grabaciones reales consentidas y con distintas cámaras e iluminación.
-
-Análisis visual local opcional con MediaPipe y permisos de cámara separados, indicadores de movimiento sin inferencias psicológicas ni reconocimiento de identidad. Síntesis local opcional, sidecars whisper.cpp/llama.cpp con capacidades acotadas, optimización por plataforma y distribución nativa firmada.
-
-Solo después de pruebas comparables, estudiar ventajas frente a otros productos: precisión regional, utilidad de feedback con evaluadores humanos, privacidad, accesibilidad, latencia/RAM y reproducibilidad. No hay resultados comparativos en esta entrega y no se afirma superioridad.
+No se afirma superioridad frente a otros productos hasta tener comparaciones con pruebas equivalentes ([BENCHMARK](BENCHMARK.md)).

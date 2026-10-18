@@ -1,40 +1,53 @@
 # Privacidad y tratamiento de datos
 
+## Principios
+
+- Sin cuentas, publicidad, analítica ni telemetría oculta.
+- Con la configuración inicial la app no hace ninguna solicitud de red fuera de su propio origen. Una prueba automática lo comprueba en Inicio y en Configuración.
+- Ningún proveedor comercial es obligatorio. Los modelos de lenguaje, de voz y de transcripción se ejecutan en tu equipo o en un servidor que tú configuras.
+- La página **Configuración → Privacidad** muestra, con tu configuración actual, qué sale del equipo y ofrece volver a procesamiento solo local.
+
 ## Datos locales
 
-El estudio y las prácticas escritas usan solamente micrófono. El simulador de defensa puede pedir además la cámara, si el usuario la activa. La imagen se analiza en el navegador con MediaPipe y no se envía ni se guarda, salvo la grabación que el usuario decide descargar. Grabaciones originales, texto, métricas, objetivo y valoración se conservan en el dispositivo. Web: IndexedDB para sesiones/audio/chunks/rúbricas, CacheStorage para modelos y shell, localStorage para preferencias. Tauri: sesiones y audio en SQLite del directorio de datos de la aplicación; los demás datos en el WebView.
+| Dato                                                | Web                                 | Escritorio (Tauri)                                |
+| --------------------------------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Grabaciones analizadas, transcripciones, métricas   | IndexedDB                           | SQLite en el directorio de datos de la aplicación |
+| Prácticas guiadas, informes y video opcional        | IndexedDB                           | Almacenamiento del WebView                        |
+| Material académico, fragmentos y vectores           | IndexedDB                           | Almacenamiento del WebView                        |
+| Modelos de Oratoria Lab (Whisper, Piper, MediaPipe) | CacheStorage, un espacio por modelo | Almacenamiento del WebView                        |
+| Preferencias y asignación de modelos                | localStorage                        | localStorage del WebView                          |
+| Modelos de Ollama                                   | Los administra Ollama               | Los administra Ollama                             |
 
-Al grabar se escriben chunks comprimidos temporales. Al terminar se ensamblan y retiran; descartar o desmontar limpia el draft. Un cierre abrupto del proceso puede dejar chunks huérfanos: no hay recuperación automática ni garbage collection entre pestañas en esta versión, para evitar borrar grabaciones activas de otra pestaña.
+La cámara se analiza en el equipo con MediaPipe. No se identifica a nadie ni se infieren emociones o personalidad. El video de una práctica solo se guarda si activas «Grabación» al configurarla.
 
-No se implementan cuentas, sincronización, analytics, publicidad, reconocimiento de identidad ni inferencia de emociones. Solo las dos opciones del simulador indicadas en la tabla envían datos de práctica a terceros, y únicamente cuando el usuario las activa. Los informes del simulador se guardan en localStorage del navegador (máximo 10). Bibliotecas JS, CSS y runtime WASM se incluyen en el build y se sirven desde el mismo origen.
+Los datos no se cifran en reposo. La copia completa de una grabación puede cifrarse con contraseña (AES-256-GCM con PBKDF2-SHA256 de 600.000 iteraciones); ver [BACKUPS](BACKUPS.md).
 
 ## Conexiones
 
-| Acción                                                        | Destino                                                                                          | Contenido enviado                                                                                                   |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Abrir/cargar web o preparar/actualizar offline explícitamente | Alojamiento elegido                                                                              | Solicitudes de recursos estáticos e información normal de conexión; sin audio/texto                                 |
-| Descargar Whisper explícitamente                              | `huggingface.co` y hosts HTTPS de Hugging Face (`*.hf.co`, `*.huggingface.co`, `*.xethub.hf.co`) | GET de archivos de una revisión fijada; IP/metadatos de conexión; sin credenciales, referrer, audio o transcripción |
-| Abrir un enlace de procedencia                                | Sitio indicado en el enlace                                                                      | Navegación elegida por el usuario                                                                                   |
-| Grabar, DSP, editar, valorar, practicar, exportar             | Sin servicio externo                                                                             | Datos procesados localmente                                                                                         |
-| Descargar modelos de cámara explícitamente                    | `storage.googleapis.com`                                                                         | GET de dos archivos de MediaPipe e información normal de conexión. Sin imagen, audio ni texto                       |
-| Transcripción en vivo del simulador (opcional)                | Servicio de reconocimiento del navegador (Google en Chrome, Microsoft en Edge)                   | Audio del micrófono mientras el usuario expone o responde                                                           |
-| Comisión con IA del simulador (opcional)                      | Dirección configurada por el usuario (local con Ollama/LM Studio, o Gemini/OpenAI)               | Título, resumen, texto transcrito de la exposición y de las respuestas. La clave de API se guarda en localStorage   |
-| Desarrollo                                                    | Vite en localhost, incluyendo WebSocket HMR                                                      | Recursos locales de desarrollo                                                                                      |
+| Acción                                                    | Destino                                                         | Qué se envía                                                                                     |
+| --------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Abrir la web o preparar el uso sin conexión               | Alojamiento de la página                                        | Solicitudes de archivos estáticos                                                                |
+| Instalar Whisper o voces Piper (botón «Instalar»)         | `huggingface.co` y sus hosts de archivos                        | Descarga de archivos de una revisión fijada. Sin audio ni texto                                  |
+| Instalar MediaPipe                                        | `storage.googleapis.com`                                        | Descarga de dos archivos. Sin imagen                                                             |
+| Usar un modelo de lenguaje con Ollama                     | La dirección configurada (por defecto `http://localhost:11434`) | Contexto de la práctica, fragmentos de tu material, tu exposición y tus respuestas transcritas   |
+| Descargar o desinstalar modelos de Ollama                 | Ollama local, que descarga de su propio registro                | Nombre del modelo                                                                                |
+| Servidor compatible con OpenAI, de voz o de transcripción | La dirección que configures                                     | Texto de las preguntas (voz), audio de tus respuestas (transcripción) o la conversación (modelo) |
+| Reconocimiento de voz del navegador (opcional)            | Google en Chrome, Microsoft en Edge                             | Audio del micrófono durante tus turnos                                                           |
+| Voces en línea del navegador (desactivadas por defecto)   | Microsoft o Google                                              | Texto de las preguntas                                                                           |
 
-No hay actualizador Tauri remoto configurado. En PWA, preparar/actualizar el shell requiere una acción explícita y SHA-256 por recurso. Las comprobaciones del script pequeño del Service Worker pueden seguir el ciclo del navegador; la versión preparada del shell se conserva hasta terminar otra preparación. La CSP de producción permite origen propio, medios blob, workers propios y las familias de hosts de descarga. El worker de inferencia añade un bloqueo de fetch fuera del runtime propio. Este bloqueo no equivale a aislamiento total del equipo o protección frente a una extensión maliciosa.
+La política de seguridad de contenido (CSP) de producción solo permite conectar con el propio origen, `localhost` y `127.0.0.1` en cualquier puerto, y los hosts de descarga de modelos. Si configuras una dirección que no es de tu equipo, la app lo advierte y la CSP del navegador bloqueará la conexión salvo que se trate de esos hosts.
 
-## Conservación y eliminación
+## Gestión de modelos y archivos
 
-El usuario puede exportar TXT, CSV, JSON y original de audio como archivos ordinarios sin cifrado. El informe JSON registra métodos y diccionario; no incluye bytes de audio. La función Copia completa genera un archivo restaurable por sesión, con audio original y datos guardados, y permite cifrar todo su contenido con una contraseña. La opción cifrada utiliza AES-256-GCM, salt/IV aleatorios y PBKDF2-SHA256 con 600.000 iteraciones. La contraseña se usa en un worker local, no se persiste ni se envía; al cerrar se retira del estado del formulario y el worker termina. No se promete borrado físico de todas las copias temporales de memoria de JavaScript.
+- Los modelos de Ollama se instalan y desinstalan solo con su API oficial (`POST /api/pull`, `DELETE /api/delete`, `POST /api/generate` con `keep_alive: 0` para liberar memoria). Oratoria Lab no borra archivos de Ollama por su cuenta.
+- En escritorio, el comando `ollama_storage` lee los manifiestos de Ollama **en modo solo lectura** para informar capas compartidas y el espacio liberado medido. No escribe, mueve ni borra nada, no sigue enlaces simbólicos y valida cada huella antes de usarla.
+- Desinstalar un modelo de Oratoria Lab borra solo su espacio exclusivo en CacheStorage. La app comprueba después que ese espacio ya no existe.
+- La app no ejecuta comandos del sistema. El escritorio expone siete comandos acotados: cinco de sesiones y dos de solo lectura (`system_info`, `ollama_storage`).
 
-El archivo cifrado se descarga con nombre genérico; no expone título, texto ni fecha de práctica en su envoltura, aunque su tamaño sigue siendo visible. La contraseña no es recuperable por la app. El cifrado del archivo no cambia la protección de las sesiones que ya están almacenadas en IndexedDB/SQLite. Se puede eliminar cada sesión con confirmación y el modelo separadamente. Una nueva versión del shell no elimina sesiones/modelos.
+## Eliminación
 
-No hay cifrado en reposo implementado. La base Rust limita el directorio propio a modo 0700 en Unix; Windows utiliza el directorio de datos del usuario con sus permisos del sistema. La protección del dispositivo/perfil depende del sistema y del navegador. Eliminación en DB es lógica; no se promete borrado forense del soporte. En web, otros scripts del mismo origen pueden acceder a sus almacenes, por lo que el origen de publicación forma parte de la confianza.
-
-Los navegadores pueden desalojar datos, negar persistencia o restringir almacenamiento. Las cuotas y retención no son ilimitadas. Al borrar datos del sitio se pierden sesiones web, preferencias y modelos. Mantén copias de lo que desees conservar. Restaurar una copia requiere selección explícita, descifrado si corresponde, validación y confirmación de la vista previa; solo entonces guarda una nueva sesión mediante el almacén local. La validación no certifica quién generó sus resultados. No se importan preferencias, modelos ni rúbricas ajenas a la valoración guardada, y no existe sincronización automática entre web y escritorio. Consulta [BACKUPS](BACKUPS.md).
+Cada sesión se elimina desde el historial con confirmación. **Configuración → Gestión de datos** permite eliminar todos los datos de este equipo (con la opción de desinstalar también los modelos de Oratoria Lab) o restablecer la configuración. Ninguna de estas acciones toca los modelos de Ollama. La eliminación en bases de datos es lógica; no se promete borrado forense del soporte.
 
 ## Interpretación de resultados
 
-Actividad es estimación energética, no detección certificada de voz; ritmo depende de la exactitud de la transcripción. Candidatos léxicos y frecuencia fundamental no determinan personalidad, confianza, emoción u honestidad. Las valoraciones son manuales, con evidencia y cobertura, y se diferencian de las mediciones. Whisper no se usa para identificar a nadie; texto y tiempos requieren revisión.
-
-Los tests emplean únicamente datos sintéticos y respuestas ficticias claramente de prueba. La aplicación abre vacía y no los inserta en el historial del usuario.
+Las mediciones (ritmo, pausas, volumen, mirada) son estimaciones técnicas, no juicios sobre la persona. Los criterios sin datos suficientes aparecen como «No evaluado». El evaluador con IA no recibe el temperamento de los interlocutores y sus valoraciones se descartan si citan frases que no aparecen literalmente en la transcripción. Los tests usan solo datos ficticios y la app nunca los inserta en tu historial.

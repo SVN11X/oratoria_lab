@@ -1,53 +1,77 @@
 # Arquitectura
 
-## Flujo de audio
+## Visión general
 
-Micrófono → MediaStream → MediaRecorder → chunks de IndexedDB → Blob comprimido. AudioWorklet calcula niveles RMS actuales; AnalyserNode es el fallback. El reloj descuenta pausas. Detener, error o desmontaje libera tracks, nodos, contexto y temporizadores.
+```text
+apps/web            React 19 + Vite 7. Interfaz, workers y adaptadores del navegador
+apps/desktop        Tauri 2 (Rust). Reutiliza apps/web/dist y agrega SQLite y comandos de solo lectura
+packages/
+  core              Esquemas Zod y contratos de sesión
+  audio             DSP: actividad, pausas, RMS, F0 y remuestreo
+  evaluation        Conteo de palabras, muletillas, evidencias y rúbricas manuales
+  conversation      Motor conversacional universal, escenarios, personas, criterios, evaluación y entrenador
+  knowledge         Extracción PDF/DOCX/PPTX/texto, segmentación, índice híbrido y comparación de presentación
+  model-manager     Cliente de la API de Ollama, catálogo, auditoría, perfiles y modelos administrados
+  defense           Señales de cámara, informe de voz y cuerpo, términos clave (reutilizado por la sala)
+  storage           IndexedDB (web) y adaptador SQLite (escritorio)
+  export            Informes, copias completas y cifrado
+  transcription     Contrato y validación de transcripciones
+  simulation        Prácticas escritas de la versión anterior (solo pruebas de compatibilidad)
+```
 
-Importación → límite y firma de archivo → lectura de duración mediante audio local → decodificación Web Audio limitada a 10 minutos → copia de canales al worker → mezcla mono y FIR antes de resampling a 16 kHz → DSP → sesión y grabación original en almacenes separados. El worker es cancelable; la decodificación Web Audio ya iniciada no puede interrumpirse y termina antes de liberar sus buffers.
+Ningún paquete depende de la interfaz. La interfaz depende de los paquetes y aporta lo que solo existe en el navegador: micrófono, cámara, workers, CacheStorage y audio.
 
-Solo la grabación producida por la app puede analizarse sin duración finita en la metadata del contenedor: su reloj y límite de captura ya acotan el contenido. Las importaciones con duración desconocida se rechazan antes de decodificar. Un archivo válido aún puede fallar por codec o memoria insuficiente.
+## Motor conversacional (`packages/conversation`)
 
-## Métodos
+Una sola máquina de estados sirve a las seis prácticas guiadas. Los escenarios son datos (`scenarios.ts`): roles, áreas de preguntas, criterios, saludo, cierre y apertura (exposición, presentación o ninguna).
 
-`oratoria-dsp-1.0.0`: RMS de ventanas de 20 ms y umbral entre -60 y -15 dBFS. Rellena huecos internos menores a 100 ms y retira actividad menor a 80 ms. Suma duración real de ventanas finales. Las pausas son silencios internos ≥250 ms; los extremos se excluyen del número de pausas, pero se incluyen en silencio total.
+- **Estados del motor**: `idle → opening → exposition → questions → closing → finished`. La sala tiene además fases de interfaz (agente hablando, respuesta, pensando).
+- **Etapas de exigencia**: introducción, fundamentos, inconsistencias, objeciones, síntesis e integración. La dificultad fija la etapa máxima y la cantidad de repreguntas; con exigencia progresiva la etapa avanza con la sesión.
+- **Dificultad y temperamento son independientes**. La dificultad (básica a defensa extrema) define la profundidad de las preguntas. El temperamento (amable a desafiante) define tono, paciencia, probabilidad de repreguntar, interrupciones y prosodia de la voz. Un filtro de civilidad rechaza insultos o descalificaciones, también en las salidas del modelo.
+- **Memoria**: áreas cubiertas, preguntas hechas (para no repetir), respuestas débiles y afirmaciones de la persona para detectar contradicciones.
+- **Análisis de cada respuesta** (`analysis.ts`): tipo (correcta, parcial, no comprende, contradice el documento, sin sustento, reconoce una limitación, pide reformular, evade, sin respuesta), coincidencia con la pregunta, justificación, evidencia, estructura STAR y cifras que no coinciden con el material.
+- **Generadores**: reglas (`rules.ts`) siempre disponibles y modelo de lenguaje opcional (`LlmPort`). Las salidas del modelo se validan con Zod, pasan por el filtro de civilidad y por el control de repetición. Tras tres fallos el motor sigue con reglas e informa el cambio.
+- **Contratos tipados**: `SessionConfig`, `Participant`, `Move`, `TurnRecord`, `EngineSnapshot`.
 
-RMS digital = raíz de media de cuadrados; dBFS = 20 log10(RMS), con suelo de -120 para evitar infinitos. Variación = desviación estándar/media del RMS en intervalos clasificados activos. No es una medida directa de prosodia ni dB SPL. El percentil 10 de energías se registra como referencia inferior; no determina automáticamente el umbral.
+## Evaluación y entrenador
 
-La frecuencia fundamental utiliza autocorrelación normalizada en ventanas de 50 ms cada 200 ms, con reducción a aproximadamente 8 kHz. Se exige un primer máximo local ≥0,8 en 70–400 Hz y al menos tres estimaciones para mostrar mediana. Tonos y música también pueden ser periódicos. Saturación se refiere a las muestras procesadas; resampling/mezcla pueden modificar el pico respecto del original.
+`evaluation.ts` evalúa criterios inteligentes (`criteria.ts`): cada uno tiene dimensión, indicador, por qué importa, cuatro niveles y métodos permitidos (medición, regla o IA). Si faltan datos el criterio queda **No evaluado** y no pesa en el índice. Cuando se usa un modelo, su nivel solo se acepta si cada evidencia citada aparece literalmente en la transcripción; el prompt del evaluador no incluye el temperamento de los interlocutores. `coach.ts` elige ejercicios para los criterios más débiles, compara con la sesión anterior del mismo escenario y calcula habilidades prioritarias.
 
-`spanish-token-count-1.0.0`: tokens Unicode, diccionario de expresiones completas, sin inferencia semántica. Prioriza expresiones de varias palabras y evita contar el mismo token dos veces. Ritmo = palabras del texto guardado ×60/duración total del audio. No estima articulación por palabra ni precisa cuándo se pronunció un candidato dentro del segmento.
+## Material académico (`packages/knowledge`)
 
-`manual-evidence-1.0.0`: cada nivel 0–3 necesita cita literal, segmento existente y justificación escrita. No evaluable se excluye del peso evaluado. Puntuación = Σ(peso×nivel/3)/peso evaluado; cobertura = peso evaluado/peso total. Se guarda snapshot de rúbrica, versión del texto y fecha. La transcripción corregida invalida la valoración previa, sin fabricar una nueva.
+1. Extracción: PDF con pdf.js (reconstrucción de líneas y títulos por tamaño de fuente, aviso si parece escaneado), DOCX y PPTX descomprimidos con fflate (estilos de título, tablas, notas del orador y orden real de diapositivas), Markdown, LaTeX y texto.
+2. Segmentación por estructura (secciones, páginas, diapositivas) en fragmentos de unos 1.000 caracteres sin truncar el documento.
+3. Índice híbrido: BM25 con raíces en español y, si hay modelo de embeddings, similitud de coseno. Los resultados se combinan con fusión de rangos recíprocos y se diversifican con MMR.
+4. Cada fragmento conserva su ubicación (página, diapositiva o sección) para citarla en las preguntas.
+5. `comparePresentation` señala cobertura, cifras ausentes o distintas, conceptos ausentes y secuencia entre la presentación y el documento.
 
-## Separación de capacidades
+Los documentos, fragmentos y vectores se guardan en IndexedDB. Los vectores se indexan por par fragmento y modelo, así que cambiar de modelo de embeddings no mezcla espacios.
 
-`core` define Zod/contratos sin UI; `audio` contiene DSP verificable y validación compartida de cabeceras/tamaños. `storage` presenta SessionStore: web IndexedDB, escritorio IPC/SQLite. `evaluation` contiene conteos, validación de evidencias y recomendaciones por reglas. `simulation` es un reducer independiente de IA. `transcription` define el adaptador y valida salida; la implementación browser vive junto al worker de Vite.
+## Gestor de modelos (`packages/model-manager` y `apps/web/src/ai`)
 
-Whisper recibe exclusivamente PCM local en un worker. Primero valida los ocho archivos de un caché con nombre ligado a la revisión. Transformers permite archivos locales y desactiva repositorios remotos. El worker bloquea fetch salvo runtime WASM del mismo origen. CacheStorage devuelve los pesos previamente verificados; no hay petición que contenga audio o texto a Hugging Face.
+- `OllamaClient` usa solo endpoints documentados: `/api/version`, `/api/tags`, `/api/ps`, `/api/show`, `/api/pull` (NDJSON con progreso y cancelación), `DELETE /api/delete`, `/api/generate` con `keep_alive: 0`, `/api/chat` con esquema JSON y `/api/embed`.
+- `auditModels` revisa lo instalado antes de recomendar descargas: conservar, actualizar, complementar, sustituir o desinstalación opcional. Nunca recomienda borrar solo por antigüedad.
+- `planProfile` asigna funciones (conversación, evaluación, embeddings) priorizando lo instalado y lista lo que falta para cada perfil.
+- Los modelos administrados por Oratoria Lab (Whisper Tiny, Base y Small; cinco voces Piper; MediaPipe) se guardan cada uno en un caché exclusivo. Whisper Tiny y MediaPipe tienen huellas SHA-256 fijadas en el código; los demás registran su huella al instalar y se comprueban en cada uso.
+- Desinstalar: liberar memoria si está cargado, llamar a la API oficial, verificar que ya no aparece, reasignar funciones y medir el espacio (exacto en escritorio, estimado en web).
 
-Sin modelo: grabar, importar, analizar, escuchar, guardar, exportar, redactar transcripción y usar rúbricas siguen disponibles. Si falta un archivo, hay corrupción, falta memoria o la implementación WASM falla, se informa el error y no se genera texto ficticio.
+## Voz, transcripción y sala
 
-SQLite guarda audio y metadata en una operación. La actualización de metadata conserva audio con COALESCE; eliminación borra una sola fila. UUID y límites se validan en Rust; SQL utiliza parámetros. Los esquemas completos del frontend se validan con Zod antes de persistir y al recuperar. Las rúbricas/preferencias/modelos del escritorio usan almacenamiento del WebView en esta etapa.
+- **Captura**: un AudioWorklet entrega cuadros PCM para la transcripción local y un AnalyserNode mide el nivel. `MediaSensors` resume voz, cámara y tono cada segundo, separado por fase.
+- **Transcripción**: Whisper en un worker persistente con ONNX Runtime WASM, por fragmentos cortados en pausas; servidor local compatible con OpenAI; o reconocimiento del navegador, declarado como en línea.
+- **Voz**: Piper en un worker (fonemas con espeak-ng WASM e inferencia ONNX), voces del sistema filtradas a locales, servidor local compatible con OpenAI o solo texto. La prosodia cambia con el temperamento. Si la persona habla con audífonos mientras un interlocutor habla, la voz se corta.
+- **Avatares**: personas vectoriales 2D animadas con un único bucle `requestAnimationFrame`: parpadeo, mirada, gestos, expresiones según temperamento y reacciones al tipo de respuesta. La boca usa visemas estimados del texto y la amplitud real del audio. Respetan la reducción de movimiento.
 
-## Simulador de defensa
+## Escritorio
 
-`packages/defense` no depende de la interfaz: extrae términos, genera preguntas y repreguntas por reglas, clasifica señales de rostro y postura, simula la atención del público, construye el informe y prepara y valida con Zod las respuestas JSON del modelo de lenguaje. Tiene pruebas con datos sintéticos.
+Comandos Rust: cinco de sesiones (UUID validado, SQL con parámetros, metadatos y audio en una operación) y dos de solo lectura. `system_info` usa `sysinfo` para memoria, CPU y sistema. `ollama_storage` busca la carpeta de modelos (`OLLAMA_MODELS`, `~/.ollama/models` y rutas del servicio de Linux), lee manifiestos con límites de tamaño y cantidad, ignora enlaces simbólicos y huellas inválidas, calcula capas compartidas y suma el tamaño real de los blobs. La CSP permite Ollama local y los hosts de descarga de modelos.
 
-En la web, `DefenseEngine` toma micrófono y cámara, mide cada 100 ms (RMS, umbral de Preferencias, tono con la misma autocorrelación del DSP) y analiza la imagen cada 125 ms con MediaPipe. Cada segundo resume todo en un `Tick` con su fase: exposición, pregunta de la comisión o respuesta. El informe usa solo los ticks del estudiante. La grabación se mantiene en memoria y no se guarda en IndexedDB. La transcripción en vivo se pausa mientras habla la comisión para no transcribir su voz.
+## Métodos de medición de audio
+
+`oratoria-dsp-1.0.0`: RMS de ventanas de 20 ms y umbral entre -60 y -15 dBFS. Rellena huecos internos menores a 100 ms y retira actividad menor a 80 ms. Las pausas son silencios internos de 250 ms o más. dBFS = 20 log10(RMS), con suelo de -120. La frecuencia fundamental usa autocorrelación normalizada en ventanas de 50 ms cada 200 ms, entre 70 y 400 Hz, con un máximo de correlación de 0,8 o más. No es dB SPL ni detecta emociones.
+
+`spanish-token-count-1.0.0`: tokens Unicode y diccionario de expresiones completas. Ritmo = palabras × 60 / duración total del audio.
 
 ## PWA y distribución
 
-Build Vite produce assets y un Service Worker con manifiesto de tamaño/SHA-256 por recurso y caché versionado por hash del contenido. Preferencias ofrece preparación/actualización explícita. Instalación del worker no descarga el shell: solo una petición prepare verifica/reutiliza/descarga los recursos y cambia el marcador de la versión preparada al completar todos. Se conserva una versión estática anterior para chunks abiertos; no se tocan caches de modelos ni IndexedDB. Las rutas hash evitan necesidad de rewrite del servidor. ONNX usa un hilo WASM: no se exige COOP/COEP en Pages.
-
-La primera preparación offline, solicitada por el usuario, copia los recursos estáticos completos, incluyendo runtime WASM y chunks opcionales de la UI; consume cuota y tráfico de descarga. Los pesos son una preparación separada y explícita. No hay backend, login, analítica ni CDN de ejecución. El desarrollo no registra Service Worker y usa un tratamiento CSP separado para el HMR local.
-
-## Copias y restauración
-
-`export/backup.ts` serializa una sesión y su grabación en un formato versionado, valida evidencias y límites, y utiliza Web Crypto para SHA-256/AES-GCM/PBKDF2. El worker `backup.ts` ejecuta serialización, Base64, comprobaciones y cifrado; la cancelación lo termina. Devuelve un Blob de descarga o una sesión validada con audio. El protocolo solo comunica fases reales de trabajo, sin porcentajes de progreso fabricados ni solicitudes de red.
-
-La restauración muestra vista previa antes de escribir. Genera un UUID de sesión nuevo, conserva la fecha de práctica y guarda audio/metadatos en la operación atómica de SessionStore. La rúbrica de la valoración es un snapshot: en esa sesión prevalece sobre otra rúbrica local con el mismo id/versión y contenido distinto. No se cambia el catálogo global. La aplicación continúa almacenando sesiones sin cifrado en reposo. Formato, parámetros y límites: [BACKUPS](BACKUPS.md).
-
-## Extensión
-
-Para P2, añadir evaluador local con esquema Zod de hallazgos y verificación literal contra segmentos. La evidencia y timestamps deben salir del texto/segmentos reales, nunca de una predicción libre. Añadir sidecars nativos mediante comandos/capacidades específicos; no exponer shell arbitraria. Un modo de conversación dinámica debe declarar el modelo que realmente se ejecuta y mantener la máquina de estados como autoridad de turnos.
+El build genera un Service Worker con tamaño y SHA-256 de cada recurso. La preparación sin conexión es explícita desde Gestión de datos y conserva la versión anterior hasta verificar la nueva. ONNX Runtime usa un hilo WASM, por lo que no se necesitan cabeceras COOP/COEP y la app funciona en GitHub Pages. Whisper y Piper comparten una sola copia del runtime (`public/ort`), y el build elimina la copia duplicada que Vite emitiría.
