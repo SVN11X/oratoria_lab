@@ -1,0 +1,2 @@
+# Los hashes de los recursos deben conservar los mismos bytes en Windows y Unix.
+apps/web/public/avatars/human/** -text
