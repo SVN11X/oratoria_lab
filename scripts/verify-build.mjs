@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, relative } from 'node:path';
 import { Script } from 'node:vm';
+import { gunzipSync } from 'node:zlib';
 
 const dist = resolve(import.meta.dirname, '../apps/web/dist');
 const base = process.env.VITE_BASE_PATH || './';
@@ -26,6 +27,14 @@ for (const asset of assets) {
   const data = await readFile(path);
   if (data.byteLength !== asset.bytes || createHash('sha256').update(data).digest('hex') !== asset.sha256)
     throw new Error(`Integridad incorrecta: ${asset.url}`);
+  if (asset.decoded) {
+    const decoded = gunzipSync(data);
+    if (
+      decoded.byteLength !== asset.decoded.bytes ||
+      createHash('sha256').update(decoded).digest('hex') !== asset.decoded.sha256
+    )
+      throw new Error(`Integridad de descompresión incorrecta: ${asset.url}`);
+  }
   paths.add(asset.url);
   bytes += asset.bytes;
 }

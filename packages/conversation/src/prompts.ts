@@ -85,7 +85,15 @@ export function contextBlock(config: SessionConfig, s: ScenarioDef): string {
       config.context[f.id]?.trim() ? `${f.label}: ${clipMarked(config.context[f.id]!, 1500).text}` : '',
     )
     .filter(Boolean);
-  return [`${s.topicLabel}: ${config.topic || 'sin indicar'}`, ...fields].join('\n');
+  return [
+    `${s.topicLabel}: ${config.topic || 'sin indicar'}`,
+    ...fields,
+    config.focus
+      ? `El ensayo se centra en la diapositiva ${config.focus.slide}. Pregunta sobre esa diapositiva y contrasta sus afirmaciones con el documento de respaldo, sin cambiar a otras diapositivas.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export const QuestionSchema = z.object({

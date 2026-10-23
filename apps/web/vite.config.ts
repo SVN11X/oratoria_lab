@@ -4,6 +4,7 @@ import tailwind from '@tailwindcss/vite';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 
 const base = process.env.VITE_BASE_PATH || './';
 async function files(dir: string): Promise<string[]> {
@@ -39,10 +40,21 @@ export default defineConfig({
         const entries = await Promise.all(
           assets.map(async (file) => {
             const data = await readFile(file);
+            // Algunos hosts sirven .gz con Content-Encoding: gzip; fetch entrega entonces
+            // los bytes descomprimidos. Ambas representaciones conservan una huella fijada.
+            const decoded = file.endsWith('.gz') ? gunzipSync(data) : null;
             return {
               url: './' + relative(dist, file).replaceAll('\\', '/'),
               bytes: data.byteLength,
               sha256: createHash('sha256').update(data).digest('hex'),
+              ...(decoded
+                ? {
+                    decoded: {
+                      bytes: decoded.byteLength,
+                      sha256: createHash('sha256').update(decoded).digest('hex'),
+                    },
+                  }
+                : {}),
             };
           }),
         );

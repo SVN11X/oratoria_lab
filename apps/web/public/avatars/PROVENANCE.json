@@ -1,0 +1,304 @@
+{
+  "source": "https://github.com/abdulrehman043/humanforge",
+  "commit": "2226df1f50a04c5a8e1c02ea33780d28337dfbb1",
+  "codeLicense": "MIT",
+  "assetLicense": "CC0-1.0",
+  "selection": "Geometría, formas, ojos, pieles de 1k, seis peinados, cuatro conjuntos y rasgos faciales. Recursos sin cambios; manifest.json reducido a la selección incluida.",
+  "files": [
+    {
+      "path": "human/body.glb.gz",
+      "bytes": 298296,
+      "sha256": "11829376ff3308620199a1c5a877410e5d1229467c1e0a8ffc6f82f61e68ede1"
+    },
+    {
+      "path": "human/eyes/blue.webp",
+      "bytes": 11282,
+      "sha256": "e7c1291a4c4016b4600eaa73852c71fbe05de93b960af4c85debbe5aed3e4a39"
+    },
+    {
+      "path": "human/eyes/brownlight.webp",
+      "bytes": 12514,
+      "sha256": "d83395fb92720eef745588091e3585e99eb72c78d3b868360cd0b26ed9324362"
+    },
+    {
+      "path": "human/eyes/green.webp",
+      "bytes": 10196,
+      "sha256": "ed365729ee362a9aae3edb06bb4d60dfbce9c8c9a395c1b9ed7b9258b769f233"
+    },
+    {
+      "path": "human/manifest.json",
+      "bytes": 42647,
+      "sha256": "7e270530c407dd3c4c3f25478e74087ac5c70b64216d095c5d16bc791b6bb05b"
+    },
+    {
+      "path": "human/proxies/clothes-female_casualsuit02.glb.gz",
+      "bytes": 154216,
+      "sha256": "b2dec83ac9a362c11164f7c033826e4758d826535b8e73b9dee7405c11ecbadb"
+    },
+    {
+      "path": "human/proxies/clothes-female_elegantsuit01.glb.gz",
+      "bytes": 118969,
+      "sha256": "8941472a70da0e08364df32b967f79cb41896e1d8f87cd3559a602c38ccc2dd3"
+    },
+    {
+      "path": "human/proxies/clothes-male_casualsuit01.glb.gz",
+      "bytes": 431309,
+      "sha256": "a765f58e9a82d9e38da192a8589e61b2aa71791b388c4782275f6da74a23e5f1"
+    },
+    {
+      "path": "human/proxies/clothes-male_elegantsuit01.glb.gz",
+      "bytes": 410698,
+      "sha256": "7ffd7e7288c9d6e8f476aadc0a2d7fbdd0b7c43ab839fa9dbe5228de229811f2"
+    },
+    {
+      "path": "human/proxies/eyebrows-eyebrow001.glb.gz",
+      "bytes": 5317,
+      "sha256": "7dfa0a0a7a509da381975dc9e813b3b7121e111b730e39eeb6439eb2ebca80eb"
+    },
+    {
+      "path": "human/proxies/eyelashes-eyelashes01.glb.gz",
+      "bytes": 5663,
+      "sha256": "0d3d7293fd027adf4c1342e81b6a13737f58f04a82ea4bac2f96f5a9bb8d30e1"
+    },
+    {
+      "path": "human/proxies/eyes-high-poly.glb.gz",
+      "bytes": 36031,
+      "sha256": "71bef0aefc165443379cd1c0e5e1b526e733befadfe1c0465bf101782490c3ea"
+    },
+    {
+      "path": "human/proxies/hair-afro01.glb.gz",
+      "bytes": 73094,
+      "sha256": "01fe17a66c5723da4a4a4bf35b7b487f00f64a89ec173e6eda5af8296daddb67"
+    },
+    {
+      "path": "human/proxies/hair-bob02.glb.gz",
+      "bytes": 73856,
+      "sha256": "1139792eeb5f0b0216f9d0a8175bba9f9ffe35e839e6601bd209ca3aea15d52b"
+    },
+    {
+      "path": "human/proxies/hair-long01.glb.gz",
+      "bytes": 156550,
+      "sha256": "21d9cd779862660ea3f54a0d6479d88392f8a864d1d9ff01cddb67f708a3dfc1"
+    },
+    {
+      "path": "human/proxies/hair-ponytail01.glb.gz",
+      "bytes": 170170,
+      "sha256": "1be282b9218991288dc0300ca0a096e8392df2cd396263182a2239b57c2d2f67"
+    },
+    {
+      "path": "human/proxies/hair-short01.glb.gz",
+      "bytes": 121409,
+      "sha256": "d86fb306c96f2ff6d6faf400b3f5b6cfe8aa91b5bbdc7d4a47f9547308c956e6"
+    },
+    {
+      "path": "human/proxies/hair-short02.glb.gz",
+      "bytes": 85736,
+      "sha256": "32d57d0c327afb9e5444d6889d3bca9dccee77058e4b2c353aeb1d499e9565c0"
+    },
+    {
+      "path": "human/proxies/teeth-teeth_base.glb.gz",
+      "bytes": 127727,
+      "sha256": "f0526df25cde256a2d769beea10517df025a74adf89c7bae77109c6b2f63f742"
+    },
+    {
+      "path": "human/proxies/tongue-tongue01.glb.gz",
+      "bytes": 5913,
+      "sha256": "354bcb9766b3f230a97d97475094e4a813afd5f6a7eb774d5bf4bbf9d114449e"
+    },
+    {
+      "path": "human/shapes.bin.gz",
+      "bytes": 1106216,
+      "sha256": "513bdb37f6e5ff13de9c383a8103c9e9e84c528129e8f669dbcf8f0e253bb91c"
+    },
+    {
+      "path": "human/skins/middleage_african_female_1k.webp",
+      "bytes": 23248,
+      "sha256": "e8865e0cc2fd4268124972c948d50555ce0b73c1021b51fd9cbed65c205d97d5"
+    },
+    {
+      "path": "human/skins/middleage_african_male_1k.webp",
+      "bytes": 28120,
+      "sha256": "c89f0b00741387f8310b23533493ed244a30a897250685c387af62c7edc19277"
+    },
+    {
+      "path": "human/skins/middleage_asian_female_1k.webp",
+      "bytes": 33770,
+      "sha256": "2678b42752632c91747a3e7cb4c2482a357f4849343f65645bb9e8ceed36f808"
+    },
+    {
+      "path": "human/skins/middleage_asian_male_1k.webp",
+      "bytes": 48668,
+      "sha256": "87ff167a54855da1c9797821836a8f9dde21f2b121bb373caba0de76c4f7b004"
+    },
+    {
+      "path": "human/skins/middleage_caucasian_female_1k.webp",
+      "bytes": 43078,
+      "sha256": "0e66a208a7b2096c6f87d3e8b201509422402dcd942bc81ebeea8c234d9f46e9"
+    },
+    {
+      "path": "human/skins/middleage_caucasian_male_1k.webp",
+      "bytes": 44864,
+      "sha256": "374daedf525610c615da121b11748f73f4ca91e183f3bead6903a4a7190e75a6"
+    },
+    {
+      "path": "human/skins/old_african_female_1k.webp",
+      "bytes": 25342,
+      "sha256": "e4ca5568ddcdb6ea959c154f0cea7bea451a4055940dc795d2bdb949d611b429"
+    },
+    {
+      "path": "human/skins/old_african_male_1k.webp",
+      "bytes": 37410,
+      "sha256": "acd9d7147b8d25e85e8eb4f4d226cbfd764974f36eca175e7838c739a7c42eaf"
+    },
+    {
+      "path": "human/skins/old_asian_female_1k.webp",
+      "bytes": 63168,
+      "sha256": "d420fd4014d2eb61e74af6165804e769a65058f8e7339ebaa547a729ed08dcae"
+    },
+    {
+      "path": "human/skins/old_asian_male_1k.webp",
+      "bytes": 61782,
+      "sha256": "14558288ae2c3747abf0a88b4258ea68596b6eca6e8106dc5a7ad475be094165"
+    },
+    {
+      "path": "human/skins/old_caucasian_female_1k.webp",
+      "bytes": 61134,
+      "sha256": "52f788ebd3f36b14f96338c238968a80f655a3dd2ab715d59c982a971155e6ff"
+    },
+    {
+      "path": "human/skins/old_caucasian_male_1k.webp",
+      "bytes": 84214,
+      "sha256": "99d28363690a9a36405d639c2b6c3b741e7422bcd76267e15bde7875edcbfb82"
+    },
+    {
+      "path": "human/skins/young_african_female_1k.webp",
+      "bytes": 26212,
+      "sha256": "b3e1aa20e686ed7c20858a077200918fa236faed2f83ad7974fbf734caa860c6"
+    },
+    {
+      "path": "human/skins/young_african_male_1k.webp",
+      "bytes": 28528,
+      "sha256": "f085285df804233b103f82ba32a7b1c4292825490073eb16232e603f695379b6"
+    },
+    {
+      "path": "human/skins/young_asian_female_1k.webp",
+      "bytes": 41238,
+      "sha256": "8d294f3407e8d58247913437a885009a5e7c3590368e3bea16735eef272e3fb9"
+    },
+    {
+      "path": "human/skins/young_asian_male_1k.webp",
+      "bytes": 39802,
+      "sha256": "8a532090407234223627449cb014813faa7a4626fe85bdc7eb3f23baee40e3de"
+    },
+    {
+      "path": "human/skins/young_caucasian_female2_1k.webp",
+      "bytes": 40624,
+      "sha256": "5ff289dcc70d4d318ff9850a8c2c804c465ff946ec322f32379d483efb795704"
+    },
+    {
+      "path": "human/skins/young_caucasian_female_1k.webp",
+      "bytes": 50850,
+      "sha256": "bb2a651c73dc411c953f89519746dca5bdc3a34e4a0844f085f53f6f5d0dbf9d"
+    },
+    {
+      "path": "human/skins/young_caucasian_male2_1k.webp",
+      "bytes": 39836,
+      "sha256": "19c688e9ebfd8ab726d8621bfafaaece12f453567ca9bfca92856dcfef955f89"
+    },
+    {
+      "path": "human/skins/young_caucasian_male_1k.webp",
+      "bytes": 43072,
+      "sha256": "2ae9a024c92868493f47363a8359323a648ee92e8e3823d44211ae11a90c838e"
+    },
+    {
+      "path": "human/textures/clothes-female_casualsuit02.webp",
+      "bytes": 123750,
+      "sha256": "edb65198860151910ec998a213c17bc06989bb663dc550a77806a728bfe74c4d"
+    },
+    {
+      "path": "human/textures/clothes-female_casualsuit02_n.webp",
+      "bytes": 10424,
+      "sha256": "0b1c3f287fa54ffc0bcc252f8177a95f75a4bd32ff013081455a9c51dc9b46a0"
+    },
+    {
+      "path": "human/textures/clothes-female_elegantsuit01.webp",
+      "bytes": 55902,
+      "sha256": "8fcc057141c60bed765da193aea67fa02b0f524b596771f674dc92fc7db0a342"
+    },
+    {
+      "path": "human/textures/clothes-female_elegantsuit01_n.webp",
+      "bytes": 17038,
+      "sha256": "dd6e780688471623454fb842ab06b740144b07c78f999e317f8daaeae0abf10c"
+    },
+    {
+      "path": "human/textures/clothes-male_casualsuit01.webp",
+      "bytes": 41790,
+      "sha256": "5012629ef5bc9b7164b27c03e0ed6bab577835e80a3758628ee4c5ec6274120e"
+    },
+    {
+      "path": "human/textures/clothes-male_casualsuit01_n.webp",
+      "bytes": 33748,
+      "sha256": "bb28329a87bed57a7726a5ed3d92282d07de82488f008870470a7e6dbe3c4214"
+    },
+    {
+      "path": "human/textures/clothes-male_elegantsuit01.webp",
+      "bytes": 11892,
+      "sha256": "b606919490fcb58e66a76c9b4c4311bda22283a0a136a55ebcafb87ef7fd5c8f"
+    },
+    {
+      "path": "human/textures/eyebrows-eyebrow001.webp",
+      "bytes": 13190,
+      "sha256": "9e3ff5438c958b54799d0288b412a5d2409ebaa36b0d630de53560596eab2f0e"
+    },
+    {
+      "path": "human/textures/eyelashes-eyelashes01.webp",
+      "bytes": 16954,
+      "sha256": "a8981a54b5cf106d717a8337910bae7f53fb7e1cf3a030f95a8b6110ba34ab62"
+    },
+    {
+      "path": "human/textures/eyes-high-poly.webp",
+      "bytes": 8488,
+      "sha256": "72b68831925e72aa1dbd24574dc28f9aeee2b949c39ef1ab14516e11fded7408"
+    },
+    {
+      "path": "human/textures/hair-afro01.webp",
+      "bytes": 712420,
+      "sha256": "19bea3657f3d300fbc82bb1c461ca14412d43707f23323647e47637b781e7b71"
+    },
+    {
+      "path": "human/textures/hair-bob02.webp",
+      "bytes": 144552,
+      "sha256": "7b855527b82d519a96e6067d6e1efd068b0b61a4c8327b986596c82f6bfc7f73"
+    },
+    {
+      "path": "human/textures/hair-long01.webp",
+      "bytes": 127766,
+      "sha256": "501832b239c650e80cb77ff9e566fe9b305c87b00957f83f7d4c627cc39dfbc9"
+    },
+    {
+      "path": "human/textures/hair-ponytail01.webp",
+      "bytes": 275886,
+      "sha256": "6ac620778efff6211568c5188c84f3ab6841100a16275fc5e12052bced977b51"
+    },
+    {
+      "path": "human/textures/hair-short01.webp",
+      "bytes": 508998,
+      "sha256": "f7ebfb5980c194bdd1222ecc6c3abad96286b36fea220de5efa83db26e1ae4d5"
+    },
+    {
+      "path": "human/textures/hair-short02.webp",
+      "bytes": 192642,
+      "sha256": "6f441db0faaa051bde070f53ee04a61ac7202e966cf140a717de0816ea81cf0d"
+    },
+    {
+      "path": "human/textures/teeth-teeth_base.webp",
+      "bytes": 29742,
+      "sha256": "47741ae7542b8fdc3a8f4c94a1532a8a0b5f00dd116459212fecbdb7007a9807"
+    },
+    {
+      "path": "human/textures/tongue-tongue01.webp",
+      "bytes": 2468,
+      "sha256": "8df8e3288bda01088e0fdf41cf93b715e79042c6cb3ffe5d69c2726b3339d271"
+    }
+  ]
+}

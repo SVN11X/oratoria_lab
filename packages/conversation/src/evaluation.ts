@@ -180,10 +180,12 @@ function ruleEvaluate(c: CriterionDef, s: EngineSnapshot): RuleOut {
       const m = median(lat);
       if (m === null) return none('No se midió el tiempo de inicio de las respuestas.');
       return {
-        level: m <= 3 && cut === 0 ? 3 : m <= 5 && cut < 0.25 ? 2 : m <= 8 ? 1 : 0,
+        // Las interrupciones del profesor dependen de su temperamento, no del mérito del usuario.
+        level: m <= 3 ? 3 : m <= 5 ? 2 : m <= 8 ? 1 : 0,
         observed: `Empieza a responder en ${m.toFixed(1)} s (mediana); ${Math.round(cut * 100)} % de las respuestas fueron interrumpidas por extensión.`,
         evidence: [],
-        methodText: 'Segundos hasta la primera voz detectada e interrupciones por respuestas extensas.',
+        methodText:
+          'Segundos hasta la primera voz detectada. Las interrupciones del interlocutor se informan sin penalización.',
       };
     }
     case 'dominio_metodologico': {
@@ -442,7 +444,8 @@ export function verifyQuote(q: string, turnId: string, s: EngineSnapshot): numbe
   const needle = fold(q);
   if (needle.length < 8) return null;
   if (turnId === 'EXP') return fold(s.exposition.map((e) => e.text).join(' ')).includes(needle) ? -1 : null;
-  const i = Number(turnId.replace(/\D/g, '')) - 1;
+  if (!/^T[1-9]\d*$/.test(turnId)) return null;
+  const i = Number(turnId.slice(1)) - 1;
   const t = s.turns[i];
   return t?.answer && fold(t.answer.text).includes(needle) ? i : null;
 }
@@ -475,7 +478,10 @@ export async function evaluateSession(input: {
   const s = input.snapshot,
     scenario = SCENARIOS[s.scenario];
   const notes: string[] = [];
-  const criteria = input.criteria?.length ? input.criteria : scenario.criteria;
+  const criteria = (input.criteria ?? scenario.criteria).map((c) => ({
+    ...c,
+    weight: Number.isFinite(c.weight) && c.weight > 0 ? c.weight : 1,
+  }));
   let ai: ReturnType<typeof EvaluationSchema.parse> | null = null;
   let evaluatorModel: string | null = null;
   const aiCriteria = criteria.filter((c) => c.methods.includes('ia'));
@@ -593,17 +599,14 @@ export async function evaluateSession(input: {
         coverage: Math.round((evalW / totalW) * 100),
       }
     : null;
-  const strengths = ai?.fortalezas.length
-    ? ai.fortalezas
-    : evaluated.filter((r) => r.level === 3).map((r) => `${r.name}: ${r.observed}`);
-  const improvements = ai?.mejoras.length
-    ? ai.mejoras
-    : evaluated.filter((r) => r.level !== null && r.level <= 1).map((r) => `${r.name}: ${r.improve}`);
-  const summary =
-    ai?.resumen ||
-    (evaluated.length
-      ? `Se evaluaron ${evaluated.length} de ${results.length} criterios. ${evaluated.filter((r) => r.level! >= 2).length} quedaron en nivel logrado o destacado y ${evaluated.filter((r) => r.level! <= 1).length} requieren práctica.`
-      : 'No hubo datos suficientes para evaluar criterios.');
+  // El resumen se deriva de los criterios aceptados. El texto libre del modelo no tiene citas.
+  const strengths = evaluated.filter((r) => r.level === 3).map((r) => `${r.name}: ${r.observed}`);
+  const improvements = evaluated
+    .filter((r) => r.level !== null && r.level <= 1)
+    .map((r) => `${r.name}: ${r.improve}`);
+  const summary = evaluated.length
+    ? `Se evaluaron ${evaluated.length} de ${results.length} criterios. ${evaluated.filter((r) => r.level! >= 2).length} quedaron en nivel logrado o destacado y ${evaluated.filter((r) => r.level! <= 1).length} requieren práctica.`
+    : 'No hubo datos suficientes para evaluar criterios.';
   return {
     criteria: results,
     summary,

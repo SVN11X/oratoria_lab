@@ -1,49 +1,57 @@
-# Comparación con Yoodli, Orai y VirtualSpeech
+# Comparación y benchmark reproducible
 
-Fecha: 18 de octubre de 2026. Esta comparación se basa en la documentación pública indicada en Fuentes y en lo que Oratoria Lab hace en esta entrega según [STATUS](STATUS.md). No se usaron cuentas de pago ni se probaron los productos comerciales, así que sus columnas resumen lo que ellos declaran. Los precios cambian con frecuencia y no se copian aquí: consúltalos en sus páginas.
+Revisión: 23 de octubre de 2026. Las columnas comerciales reflejan documentación pública de los proveedores. No se probaron sus cuentas, modelos ni tratamientos internos de datos. «No verificado» no significa que una función no exista.
 
-## Resumen
+| Aspecto                 | Yoodli                                                                   | Orai                                      | VirtualSpeech                                                      | Oratoria Lab 0.3.0                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Conversación adaptativa | Roleplays y varias personas [1][2]                                       | Práctica y comentarios de oratoria [4]    | Roleplays, objeciones y personalización [6]                        | Seis escenarios por reglas o LLM local; calidad con pesos reales pendiente                                       |
+| Comisión y documentos   | Tesis completa con citas: no verificado                                  | No verificado                             | Escenarios personalizables; citas a tesis: no verificado           | Roles y temperamentos, PDF/DOCX/PPTX, recuperación con ubicaciones                                               |
+| Voz y personajes        | Interlocutores virtuales [1]                                             | No es el foco del producto [4]            | Avatares y entornos web/VR [6]                                     | Humanos 3D y voces locales; sin comparación perceptual                                                           |
+| Métricas y progreso     | Comentarios y seguimiento [1]                                            | Ritmo, muletillas, claridad y energía [4] | Evaluación por escenario [6]                                       | DSP, criterios, citas, historial y ejercicios; umbrales sin calibración humana                                   |
+| Español                 | No verificado aquí                                                       | No verificado aquí                        | Más de veinte idiomas anunciados; verificar escenario concreto [6] | Interfaz y reglas en español; STT/TTS dependen del modelo                                                        |
+| Precio                  | Acceso gratuito limitado y planes de pago según condiciones vigentes [3] | Planes personales y de equipos [5]        | Planes y complementos de pago [6]                                  | Código abierto, sin API comercial obligatoria                                                                    |
+| Local y sin conexión    | No verificado                                                            | No verificado                             | No verificado                                                      | Datos y métricas locales; preparación offline. Reconocimiento del navegador en línea solo por elección explícita |
 
-| Aspecto                                     | Yoodli                                  | Orai                     | VirtualSpeech                       | Oratoria Lab (esta entrega)                                                                                    |
-| ------------------------------------------- | --------------------------------------- | ------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Modelo de negocio                           | Plan gratuito limitado y planes de pago | Suscripción en app móvil | Suscripción y planes para empresas  | Gratuito y de código abierto (MIT)                                                                             |
-| Dónde se procesan tus datos                 | En la nube del proveedor                | En la nube del proveedor | En la nube del proveedor            | En tu equipo. Sin cuentas ni telemetría                                                                        |
-| Funciona sin conexión                       | No                                      | No                       | No                                  | Sí, tras preparar el uso sin conexión e instalar los modelos                                                   |
-| Simulación conversacional (roleplay)        | Sí, con IA en la nube                   | No es su foco            | Sí, con IA y escenarios en VR o web | Sí: seis prácticas con interlocutores por reglas o con un modelo local de Ollama                               |
-| Defensa de tesis con comisión               | No es un escenario específico           | No                       | No es un escenario específico       | Sí: seis roles de comisión, temperamento y dificultad independientes, preguntas que citan página o diapositiva |
-| Preguntas basadas en tus documentos         | No verificado                           | No                       | Escenarios configurables            | Sí: PDF, DOCX, PPTX y texto sin límite de caracteres, búsqueda local y citas verificables                      |
-| Métricas de voz (ritmo, pausas, muletillas) | Sí                                      | Sí                       | Sí                                  | Sí, con DSP local y método explicado en cada criterio                                                          |
-| Lenguaje corporal                           | Sí, con video                           | No verificado            | Sí, en VR y con cámara              | Sí, con MediaPipe local: mirada, gestos, manos en la cara y postura. Sin inferir emociones                     |
-| Avatares                                    | Interlocutores virtuales                | No                       | Avatares 3D y entornos VR           | Avatares 2D vectoriales animados con sincronía labial aproximada. **Sin avatares 3D realistas**                |
-| Voces                                       | Voces neuronales en la nube             | No aplica                | Voces neuronales en la nube         | Voces Piper locales, voces del sistema o servidor local. Menos expresivas que las comerciales                  |
-| Evaluación                                  | Automática con IA                       | Puntajes automáticos     | Automática con IA                   | Criterios con nivel, evidencia literal y método. «No evaluado» cuando faltan datos. Evaluador sin temperamento |
-| Seguimiento del progreso                    | Sí                                      | Sí                       | Sí                                  | Sí: historial unificado, tendencias por criterio y ejercicios recomendados                                     |
-| Español                                     | No verificado                           | No verificado            | No verificado                       | Español como idioma principal de interfaz, preguntas y reglas                                                  |
-| Plataformas                                 | Web e integraciones                     | iOS y Android            | Web, móvil y visores VR             | Web (GitHub Pages) y escritorio con Tauri. Sin app móvil nativa                                                |
-| Funciones de equipos y administración       | Sí                                      | No                       | Sí                                  | No                                                                                                             |
+## Protocolo de comparación
 
-## Dónde Oratoria Lab es más fuerte
+1. Usar una investigación **ficticia** y las mismas respuestas grabadas en cada producto. Registrar fecha, versiones, idioma, hardware, configuración y plan. No subir tesis reales a servicios externos sin decisión expresa de su propietario.
+2. Ejecutar cuatro condiciones: amable/experta, desafiante/intermedia, escéptica/avanzada y seria/experta. Repetir cada una tres veces y alternar el orden.
+3. Dos evaluadores sin conocer el producto valoran pertinencia, rigor, dependencia de la respuesta anterior, consistencia del rol, dificultad y utilidad, con escala 0–3 y ejemplos. Registrar desacuerdos.
+4. Contar citas válidas, afirmaciones sin respaldo, repeticiones, fallos y tareas no disponibles. Un identificador válido no demuestra que la fuente respalde la pregunta.
+5. Medir latencia inicial y por turno, con mediana y percentil 95. Para voz, usar mismo micrófono, audífonos, frase y terminología; comparar transcripción con referencia manual.
+6. Evaluar naturalidad y comprensión con oyentes. Medir desfase audiovisual con grabación de pantalla. Un test JSON no mide naturalidad.
+7. Registrar RAM/VRAM medidas cuando existan, recursos transferidos, trabajo sin red y eliminación. Distinguir tamaño lógico y espacio realmente recuperado.
 
-1. Privacidad: tus grabaciones, documentos y respuestas no salen del equipo si usas modelos locales.
-2. Defensa de tesis: comisión con roles académicos, preguntas ancladas a tu documento con página o diapositiva y detección de cifras que contradicen tu propio material.
-3. Transparencia: cada criterio muestra cómo se midió, la evidencia literal y si no hubo datos suficientes.
-4. Costo: gratuito, sin límites de uso impuestos por un servicio.
+## Herramientas incluidas
 
-## Dónde todavía está por detrás
+```powershell
+Set-Location -LiteralPath 'C:\my_drive\Portafolio\oratoria_lab'
+ollama list
+# Cambia los nombres por los que realmente aparezcan instalados.
+node .\scripts\benchmark-local.mjs --models 'qwen2.5:7b,qwen3:4b' --output '.\benchmark-local.json'
+```
 
-1. Realismo visual: no hay avatares 3D ni entornos VR.
-2. Naturalidad de la voz: las voces Piper y del sistema son menos expresivas que las voces neuronales en la nube.
-3. Calidad de las preguntas libres: depende del modelo local que el equipo pueda ejecutar. Con el motor de reglas son correctas pero más predecibles.
-4. Validación: los umbrales de evaluación son referencias razonables, no valores validados con evaluadores humanos.
-5. Plataformas: sin app móvil ni funciones para equipos.
+El script solo habla con Ollama en loopback y no descarga ni elimina modelos. Guarda cuatro casos ficticios por modelo, respuesta, digest, latencia, carga y tokens/s cuando Ollama los informa. Comprueba formato JSON e identificadores; deja calidad para revisión humana. No se ejecutó contra modelos del usuario.
 
-## Fuentes
+Inventario Windows de solo lectura:
 
-- [Yoodli Review: Features, Pricing, and How It Compares in 2026 (Outdoo)](https://www.outdoo.ai/blog/yoodli-review-and-pricing)
-- [Best Yoodli Alternatives Compared (Outdoo)](https://www.outdoo.ai/blog/yoodli-alternatives)
-- [Yoodli en Capterra](https://www.capterra.com/p/10019324/Yoodli/)
-- [Orai en App Store](https://apps.apple.com/us/app/-/id1203178170)
-- [VirtualSpeech: planes](https://virtualspeech.com/pricing)
-- [VirtualSpeech: planes de suscripción (soporte)](https://support.virtualspeech.com/Subscription%20Plans-a4f49dcd-282b-4f21-9238-d0f044389ed7)
+```powershell
+& .\scripts\diagnostico-local.ps1 -OutputPath '.\oratoria-diagnostico-local.json'
+```
 
-Las celdas de los productos comerciales se deben revisar contra estas fuentes antes de citarlas en otro documento: las páginas cambian y en esta sesión no fue posible abrir su contenido completo.
+No invoca `powershell.exe` ni instala o elimina modelos. El informe contiene hardware y nombres de cachés para revisión local.
+
+`pnpm test` verifica reglas y contratos. `pnpm test:e2e` recorre la interfaz. `pnpm benchmark` mide un tono sintético en el DSP, no habla humana ni calidad pedagógica. Estas pruebas no son una comparación experimental con los productos comerciales.
+
+## Resultados de calidad
+
+No existe un experimento comparativo realizado. Control local, comisión académica configurable y evidencia visible son capacidades; no demuestran por sí solas mejores aprendizajes ni mayor naturalidad.
+
+## Fuentes primarias
+
+1. [Yoodli: plataforma](https://yoodli.ai/)
+2. [Yoodli: varias personas](https://yoodli.ai/feature-announcements/talk-the-talk-with-multi-persona-roleplays)
+3. [Yoodli: planes](https://yoodli.ai/pricing)
+4. [Orai: producto](https://orai.com/product/)
+5. [Orai: planes](https://orai.com/pricing/)
+6. [VirtualSpeech: roleplays, idiomas y modalidades](https://virtualspeech.com/platform/roleplays)

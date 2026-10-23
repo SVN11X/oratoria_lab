@@ -111,17 +111,26 @@ let migrated = false;
 /** Importa una sola vez los informes que el antiguo simulador guardaba en localStorage. */
 async function migrateLegacy() {
   if (migrated) return;
-  migrated = true;
   let raw: string | null = null;
   try {
     raw = localStorage.getItem('oratoria-defense-v1');
-    if (!raw || localStorage.getItem('oratoria-defense-migrated') === '1') return;
+    if (!raw || localStorage.getItem('oratoria-defense-migrated') === '1') {
+      migrated = true;
+      return;
+    }
   } catch {
     return;
   }
-  const reports = (
-    (JSON.parse(raw) as { state?: { reports?: DefenseReport[] } }).state?.reports ?? []
-  ).filter((r) => r?.id && r.findings);
+  let reports: DefenseReport[];
+  try {
+    const saved = (JSON.parse(raw) as { state?: { reports?: unknown } }).state?.reports;
+    reports = Array.isArray(saved)
+      ? saved.filter((r): r is DefenseReport => !!r && typeof r.id === 'string' && Array.isArray(r.findings))
+      : [];
+  } catch {
+    // Una configuración antigua dañada no impide abrir las sesiones de la base actual.
+    return;
+  }
   const existing = new Set((await practiceStore.list()).map((r) => r.id));
   for (const r of reports) {
     if (existing.has(r.id)) continue;
@@ -182,4 +191,5 @@ async function migrateLegacy() {
   } catch {
     /* sin almacenamiento */
   }
+  migrated = true;
 }

@@ -177,6 +177,8 @@ export type SessionConfig = {
   interruptions: boolean;
   /** Si hay exposición inicial, en minutos; 0 = sin exposición. */
   openingMinutes: number;
+  /** Ensayo centrado en una diapositiva; otros documentos sirven como respaldo. */
+  focus?: { docId: string; slide: number } | null;
 };
 
 export type Move = {

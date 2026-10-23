@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   Captions,
@@ -43,6 +43,7 @@ import { llmFor } from '../ai/llm';
 import { useAi } from '../ai/settings';
 import { makeRetriever, listDocuments } from '../knowledge/library';
 import { MediaSensors, type LiveStats } from './sensors';
+import { TextSensors } from './text-sensors';
 import { createVision, visionInstalled } from './vision';
 import { Avatar, AudienceMember, type AvatarHandle } from './Avatar';
 import { makeStt, makeTts, STT_TEXT, TTS_TEXT, voiceSpec } from './engines';
@@ -50,6 +51,8 @@ import { toConfig, type PracticeSetup } from './store';
 import type { PracticeRecord } from './records';
 import type { Stt } from '../voice/stt';
 import type { SpeakHandle, Tts } from '../voice/tts';
+
+const HumanCommittee = lazy(() => import('./HumanCommittee').then((m) => ({ default: m.HumanCommittee })));
 
 type Stage = 'preparando' | 'agente' | 'exposicion' | 'respuesta' | 'pensando' | 'cierre';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -82,6 +85,7 @@ export function Room({
   const ai = useAi();
   const [stage, setStage] = useState<Stage>('preparando'),
     [paused, setPaused] = useState(false),
+    [illustrated, setIllustrated] = useState(setup.avatars === 'ilustrados'),
     [fatal, setFatal] = useState(''),
     [warnings, setWarnings] = useState<string[]>([]),
     [status, setStatus] = useState('Preparando micrófono, voces y material…'),
@@ -102,7 +106,7 @@ export function Room({
     [engines, setEngines] = useState({ stt: '', tts: '', llm: '' }),
     [stats, setStats] = useState({ wpm: null as number | null, fillers: 0 });
   const engine = useRef<ConversationEngine | null>(null),
-    sensors = useRef<MediaSensors | null>(null),
+    sensors = useRef<MediaSensors | TextSensors | null>(null),
     stt = useRef<Stt | null>(null),
     tts = useRef<Tts | null>(null),
     speech = useRef<SpeakHandle | null>(null),
@@ -429,7 +433,7 @@ export function Room({
       try {
         const [{ tts: t, warning: tw }, retriever, docs] = await Promise.all([
           makeTts(),
-          makeRetriever(setup.docIds),
+          makeRetriever(setup.docIds, config.focus),
           listDocuments(),
         ]);
         tts.current = t;
@@ -443,38 +447,48 @@ export function Room({
             6,
           );
         const clock = () => sensors.current?.now() ?? 0;
-        const { stt: recognizer, warning: sw } = await makeStt(
-          {
-            onFinal: (text, at) => {
-              const phase = userPhase.current;
-              chunks.current.push({ text, t: at, phase });
-              if (phase === 'exposicion') engine.current?.addExposition(text, at);
-              if (alive.current) setLastFinal(text);
-            },
-            onInterim: (text) => {
-              interimRef.current = text;
-              if (alive.current) setInterim(text);
-            },
-            onError: (m) => warn(m),
-            onBusy: (b) => alive.current && setTranscribing(b),
-          },
-          clock,
-        );
+        const { stt: recognizer, warning: sw } =
+          setup.inputMode === 'texto'
+            ? {
+                stt: null,
+                warning:
+                  'Práctica escrita: sin acceso al micrófono ni a la cámara. La voz y el cuerpo no se evalúan.',
+              }
+            : await makeStt(
+                {
+                  onFinal: (text, at) => {
+                    const phase = userPhase.current;
+                    chunks.current.push({ text, t: at, phase });
+                    if (phase === 'exposicion') engine.current?.addExposition(text, at);
+                    if (alive.current) setLastFinal(text);
+                  },
+                  onInterim: (text) => {
+                    interimRef.current = text;
+                    if (alive.current) setInterim(text);
+                  },
+                  onError: (m) => warn(m),
+                  onBusy: (b) => alive.current && setTranscribing(b),
+                },
+                clock,
+              );
         warn(sw);
         stt.current = recognizer;
         const local = recognizer && !recognizer.live;
-        const { engine: s, warning } = await MediaSensors.open({
-          camera: setup.camera,
-          record: setup.record,
-          threshold,
-          deviceId: micId || undefined,
-          cameraId: cameraId || undefined,
-          onLive: (st) => {
-            liveRef.current = st;
-            if (alive.current) setLive(st);
-          },
-          onPcm: local ? (frame, rate, t) => recognizer.feed?.(frame, rate, t) : undefined,
-        });
+        const { engine: s, warning } =
+          setup.inputMode === 'texto'
+            ? { engine: new TextSensors(), warning: '' }
+            : await MediaSensors.open({
+                camera: setup.camera,
+                record: setup.record,
+                threshold,
+                deviceId: micId || undefined,
+                cameraId: cameraId || undefined,
+                onLive: (st) => {
+                  liveRef.current = st;
+                  if (alive.current) setLive(st);
+                },
+                onPcm: local ? (frame, rate, t) => recognizer.feed?.(frame, rate, t) : undefined,
+              });
         if (!alive.current) {
           await s.stop();
           return;
@@ -680,22 +694,34 @@ export function Room({
             {card}
           </div>
         )}
-        <div className="seats">
-          {config.participants.map((p, i) => (
-            <div className={`seat ${speaking === p.id ? 'speaking' : ''}`} key={p.id}>
-              <Avatar
-                ref={(h) => {
-                  if (h) avatars.current.set(p.id, h);
-                  else avatars.current.delete(p.id);
-                }}
-                look={p.look}
-                temperament={p.temperament}
-                seed={i}
-                label={`${p.name}, ${p.role}${speaking === p.id ? ', está hablando' : ', escucha'}`}
-              />
-            </div>
-          ))}
-        </div>
+        {!illustrated ? (
+          <Suspense fallback={<p role="status">Cargando vista 3D…</p>}>
+            <HumanCommittee
+              participants={config.participants}
+              handles={avatars}
+              speakerId={speaking}
+              paused={paused}
+              onFallback={() => setIllustrated(true)}
+            />
+          </Suspense>
+        ) : (
+          <div className="seats">
+            {config.participants.map((p, i) => (
+              <div className={`seat ${speaking === p.id ? 'speaking' : ''}`} key={p.id}>
+                <Avatar
+                  ref={(h) => {
+                    if (h) avatars.current.set(p.id, h);
+                    else avatars.current.delete(p.id);
+                  }}
+                  look={p.look}
+                  temperament={p.temperament}
+                  seed={i}
+                  label={`${p.name}, ${p.role}${speaking === p.id ? ', está hablando' : ', escucha'}`}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         <div className="room-table">
           {config.participants.map((p) => (
             <div className={`nameplate ${speaking === p.id ? 'speaking' : ''}`} key={p.id}>

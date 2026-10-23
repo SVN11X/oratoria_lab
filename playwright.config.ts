@@ -14,6 +14,20 @@ export default defineConfig({
     launchOptions: {
       ...(executablePath ? { executablePath } : {}),
       args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+      ...(process.env.PW_SOFTWARE_GL === '1'
+        ? {
+            args: [
+              '--use-fake-device-for-media-stream',
+              '--use-fake-ui-for-media-stream',
+              '--no-zygote',
+              '--in-process-gpu',
+              '--use-gl=angle',
+              '--use-angle=swiftshader',
+              '--enable-unsafe-swiftshader',
+              '--ignore-gpu-blocklist',
+            ],
+          }
+        : {}),
     },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

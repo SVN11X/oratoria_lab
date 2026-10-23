@@ -149,6 +149,7 @@ test('práctica con modelo local simulado: preguntas del modelo y evaluación de
   });
   try {
     await page.goto('/#/practice/tesis');
+    await page.getByLabel('Representación de los interlocutores').selectOption('ilustrados');
     await page.getByLabel('Título de la tesis').fill('Robot de navegación autónoma para bodegas');
     await page.getByLabel('Exposición de la tesis (minutos)').selectOption('0');
     await page.getByLabel('Preguntas principales').selectOption('2');
@@ -167,7 +168,9 @@ test('práctica con modelo local simulado: preguntas del modelo y evaluación de
       await done.click();
     }
     await expect(report).toBeVisible({ timeout: 60000 });
-    await expect(page.getByText('[Simulado] Evaluación del servidor de prueba.')).toBeVisible();
+    // Un resumen libre sin citas no se incorpora al informe, aunque provenga del modelo.
+    await expect(page.getByText('[Simulado] Evaluación del servidor de prueba.')).toHaveCount(0);
+    await expect(page.getByText(/Se evaluaron \d+ de \d+ criterios/)).toBeVisible();
     await expect(page.getByText(/qwen3\.5:4b/).first()).toBeVisible();
     expect(ollama.calls.some((c) => c.path === '/api/chat')).toBe(true);
   } finally {

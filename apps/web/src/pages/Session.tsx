@@ -160,7 +160,7 @@ function SessionView({ id }: { id: string }) {
         updatedAt: new Date().toISOString(),
         segments: cleaned,
       });
-      await persist({ ...session, transcript, evaluation: null });
+      await persist({ ...session, transcript, evaluation: null, speechFeedback: null });
       setSegments(cleaned);
       setRatings([]);
       setStatus(
@@ -197,7 +197,7 @@ function SessionView({ id }: { id: string }) {
       transcript.revision = (session.transcript?.revision ?? 0) + 1;
       if (!transcript.segments.some((s) => s.text.trim()))
         throw new Error('Whisper no reconoció texto. Escucha el audio y prueba una transcripción manual.');
-      await persist({ ...session, transcript, evaluation: null });
+      await persist({ ...session, transcript, evaluation: null, speechFeedback: null });
       if (alive.current) {
         setSegments(transcript.segments);
         setRatings([]);
@@ -768,6 +768,37 @@ function SessionView({ id }: { id: string }) {
                 })()}
             </>
           )}
+        </section>
+      )}
+      {session.speechFeedback && (
+        <section className="panel">
+          <h2>Comentarios de contenido con evidencias</h2>
+          <p>{session.speechFeedback.summary}</p>
+          <p className="caption">
+            Modelo: {session.speechFeedback.model}. Apreciación automática para revisar con criterio.
+          </p>
+          {session.speechFeedback.findings.map((f, i) => (
+            <article key={i} className="coaching-note">
+              <blockquote>«{f.quote}»</blockquote>
+              <p>{f.observed}</p>
+              <p>
+                <strong>Para practicar:</strong> {f.improve}
+              </p>
+              {f.sources.map((s) => (
+                <blockquote key={s.chunkId} className="source-quote">
+                  «{s.excerpt}»
+                  <small>
+                    {s.docName} · {s.location}
+                  </small>
+                </blockquote>
+              ))}
+            </article>
+          ))}
+          {session.speechFeedback.notes.map((n) => (
+            <p className="caption" key={n}>
+              {n}
+            </p>
+          ))}
         </section>
       )}
       {notes.length > 0 && (

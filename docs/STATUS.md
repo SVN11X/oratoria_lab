@@ -1,74 +1,66 @@
-# Estado real de Oratoria Lab
+# Estado real de Oratoria Lab 0.3.0
 
-Fecha: 18 de octubre de 2026. Versión de interfaz 0.2.0. Punto de partida auditado: commit `6861e06` ([AUDITORIA](AUDITORIA.md)).
+Fecha: 23 de octubre de 2026. Base `cf8433151ea3743fb1b1e9862537eb68d4c61bae`. Auditoría histórica: [AUDITORIA](AUDITORIA.md); revisión y cambios actuales: [AUDITORIA-V2](AUDITORIA-V2.md).
 
-Categorías: **verificado** (ejecutado con éxito en una prueba automática de esta entrega), **verificado con doble de prueba** (funciona contra un servidor o archivo que imita al real), **implementado sin verificar** (el código existe y compila, pero no se pudo ejecutar con el componente real), **parcial** y **no implementado**.
+**Verificado** significa ejecutado aquí; **con doble** significa API/pesos de prueba; **sin verificar** significa código existente sin ejecución con el componente real; **parcial** conserva límites explícitos. «Simulado» se reserva a comportamientos ilustrativos o datos de prueba, no a capacidades de IA que no se tienen.
 
-## Comprobaciones ejecutadas en este entorno
+## Comprobaciones de esta entrega
 
-| Comprobación                                    | Resultado                                                                                       |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `pnpm lint`, `pnpm typecheck`, `prettier`       | Correctos                                                                                       |
-| `pnpm test` (Vitest)                            | 116 pruebas pasadas en 9 archivos                                                               |
-| `pnpm build` y `pnpm verify:build`              | Correctos. 89 recursos, 54,37 MiB, SHA-256 y tamaño verificados (antes: 86 recursos, 65,43 MiB) |
-| Playwright en Chromium 1194                     | 17 de 17 recorridos pasados (detalle abajo)                                                     |
-| axe, WCAG 2.2 AA                                | Sin violaciones en 10 pantallas en modo claro y oscuro, en la sala y en el informe              |
-| `cargo test` (escritorio)                       | 9 de 9 pruebas Rust pasadas                                                                     |
-| `cargo build` del binario de escritorio (Linux) | Correcto. Con la interfaz incluida, la app abre en una pantalla virtual y muestra Inicio        |
-| Descarga de modelos reales                      | **No posible aquí**: la red de este entorno bloquea Hugging Face, ollama.com y Google Storage   |
+| Comprobación               | Resultado                                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Lint y TypeScript estricto | Correctos                                                                                                            |
+| Vitest 4.1.12              | 129 pruebas pasadas en doce archivos                                                                                 |
+| Integridad de avatares     | 59 recursos, 6.650.419 bytes, SHA-256 correcto                                                                       |
+| Build web e integridad     | 153 recursos y 61,33 MiB; bases `./` y `/oratoria_lab/`, SHA-256 correcto                                            |
+| Navegador                  | 24 recorridos únicos aprobados en Chromium 138; WebGL por software y axe WCAG 2.2 AA                                 |
+| Dependencias               | `pnpm audit --json`: cero avisos reportados al revisar 360 dependencias                                              |
+| Benchmark DSP              | Tono sintético de diez minutos procesado; no mide calidad de habla ni aprendizaje                                    |
+| Benchmark de conversación  | Cuatro casos ejecutados contra API de prueba; proveedor y modelos del usuario pendientes                             |
+| Escritorio                 | Intentado; falla `cargo metadata` porque Cargo no está instalado. No compilado ni probado en Windows en esta entrega |
 
-Recorridos de Playwright: grabación con micrófono sintético, importación y análisis, permiso rechazado, inicio sin solicitudes externas y navegación móvil, accesibilidad en dos temas, uso sin conexión, copia completa y copia cifrada, práctica de defensa de tesis completa, entrevista sin presentación, material PDF/DOCX/PPTX con comparación y búsqueda por significado, gestor de modelos de Ollama, conexión fallida a Ollama, práctica con modelo local simulado, voz Piper administrada y rechazo de archivos alterados de Whisper.
+La pasada general aprobó 19 de 23 recorridos. Tras corregir la integridad de gzip en caché, actualizar la expectativa del resumen con evidencias y ajustar las pruebas gráficas a la rasterización por software, se repitieron seis recorridos afectados o nuevos: seis aprobados, incluidos los cuatro que habían fallado y la persistencia de comentarios del análisis libre. El total corresponde a 24 casos distintos. Antes se había corregido la incompatibilidad PDF con PDF.js legacy y el renderizado fuera de la vista.
+
+Además se compiló con `VITE_BASE_PATH=/oratoria_lab/` y se comprobó en navegador el shell y los humanos 3D tras recargar sin red en esa subruta: sin errores de página ni respuestas HTTP fallidas. `pnpm format:check` y `git diff --check` pasaron. El build avisa sobre algunos módulos mayores de 500 kB; no impide compilar. La vista 3D se carga por demanda.
 
 ## Estado por función
 
-| Función                                                                             | Estado                         | Evidencia y límites                                                                                                                                     |
-| ----------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Seis prácticas guiadas con motor conversacional único                               | Verificado                     | Pruebas unitarias de los seis escenarios con reglas. E2E completos de defensa de tesis y entrevista con respuestas escritas                             |
-| Flujo práctica, escenario, participantes, material, simulación, evaluación, repetir | Verificado                     | E2E. Configuración rápida y avanzada                                                                                                                    |
-| Comisión de tesis con seis roles, nombres ficticios y especialidad                  | Verificado                     | Pruebas unitarias y E2E                                                                                                                                 |
-| Dificultad (5 niveles) y temperamento (6 estilos) independientes                    | Verificado                     | Pruebas unitarias: el temperamento cambia el tono y la repregunta, no la evaluación. Filtro de civilidad probado                                        |
-| Repreguntas, interrupciones, antirepetición y exigencia progresiva                  | Verificado                     | Pruebas unitarias del motor. Interrupción durante la exposición sin E2E propio                                                                          |
-| Preguntas ancladas al material con página, diapositiva o sección                    | Verificado                     | Unitarias y E2E (el informe cita el archivo). Detección de cifras que contradicen el documento                                                          |
-| Material académico PDF, DOCX, PPTX, TXT, MD y LaTeX, sin límite de caracteres       | Verificado                     | Unitarias con documentos generados y E2E en el navegador. PDF escaneado: se avisa, no hay OCR                                                           |
-| Búsqueda local híbrida (palabras y significado) con RRF y MMR                       | Verificado con doble de prueba | Unitarias. E2E con embeddings de un servidor que imita Ollama. Sin reranker neuronal                                                                    |
-| Comparación presentación y documento                                                | Verificado                     | Unitarias y E2E                                                                                                                                         |
-| Gestor de modelos: inventario, auditoría, perfiles, asignación por función          | Verificado con doble de prueba | E2E contra un servidor con la API documentada de Ollama. **No probado contra Ollama real**                                                              |
-| Descarga con progreso, cancelación y reintento                                      | Verificado con doble de prueba | E2E                                                                                                                                                     |
-| Desinstalación real con la API oficial y verificación posterior                     | Verificado con doble de prueba | E2E comprueba que solo se envía `DELETE /api/delete` con el modelo confirmado. Ollama real pendiente                                                    |
-| Sustitución guiada (descargar, probar, reasignar, preguntar)                        | Verificado con doble de prueba | E2E                                                                                                                                                     |
-| Espacio liberado exacto y capas compartidas (escritorio)                            | Verificado en Rust             | Pruebas Rust con una carpeta de Ollama de prueba. La interfaz de escritorio no se automatizó                                                            |
-| Detección de equipo                                                                 | Parcial                        | Web: RAM aproximada del navegador, núcleos, WebGPU y prueba de CPU. Escritorio: `system_info` con pruebas Rust                                          |
-| Prueba de velocidad de un modelo                                                    | Verificado con doble de prueba | E2E. Las cifras reales dependen de tu equipo                                                                                                            |
-| Interlocutores y evaluación con modelo local                                        | Verificado con doble de prueba | E2E con preguntas y evaluación simuladas. La calidad con modelos reales no se midió                                                                     |
-| Evaluación con criterios, evidencia literal y «No evaluado»                         | Verificado                     | Unitarias (citas inventadas se descartan, evaluación igual entre temperamentos) y E2E                                                                   |
-| Entrenador, historial unificado y Mi progreso                                       | Verificado                     | E2E y unitarias. La migración de informes antiguos de localStorage no tiene prueba automática                                                           |
-| Voces Piper locales                                                                 | Verificado con doble de prueba | E2E: instalación, verificación, fonemas espeak-ng WASM, inferencia ONNX y uso en la sala con un modelo ONNX mínimo de prueba. **Voz real no escuchada** |
-| Prosodia por temperamento y corte de voz al interrumpir                             | Implementado sin verificar     | Código y vista previa; el corte requiere audífonos y micrófono real                                                                                     |
-| Voces del sistema                                                                   | Implementado sin verificar     | Chromium sin interfaz no tiene voces en español                                                                                                         |
-| Whisper Tiny, Base y Small por turnos                                               | Implementado sin verificar     | E2E solo comprueba que archivos alterados se rechazan. El modelo nunca se ejecutó                                                                       |
-| Reconocimiento de voz del navegador                                                 | Implementado sin verificar     | En línea en Chrome y Edge. No existe en WebKitGTK (escritorio Linux)                                                                                    |
-| Servidores locales compatibles con OpenAI (modelo, voz, transcripción)              | Implementado sin verificar     |                                                                                                                                                         |
-| Cámara con MediaPipe (mirada, gestos, postura)                                      | Implementado sin verificar     | El motor WASM carga; los modelos reales no se pudieron descargar aquí. No infiere emociones                                                             |
-| Avatares animados con sincronía labial                                              | Parcial                        | Personas vectoriales 2D con parpadeo, mirada, gestos y visemas. **No hay avatares 3D realistas** (ver Decisiones)                                       |
-| Práctica libre y análisis de grabación con línea de tiempo                          | Verificado                     | E2E de grabación e importación. La línea de tiempo permite saltar al momento                                                                            |
-| Rediseño, tema claro y oscuro, navegación nueva                                     | Verificado                     | E2E y axe                                                                                                                                               |
-| Uso sin conexión y copias cifradas                                                  | Verificado                     | E2E                                                                                                                                                     |
-| Privacidad: sin solicitudes externas por defecto                                    | Verificado                     | E2E en Inicio y Configuración                                                                                                                           |
-| Escritorio Tauri                                                                    | Parcial                        | Binario Linux compilado y abierto en pantalla virtual. Windows y macOS sin compilar aquí. Micrófono y cámara en WebView sin probar                      |
-| GitHub Pages                                                                        | Parcial                        | Build con base de subcarpeta verificado. Publicación remota no ejecutada desde aquí                                                                     |
+| Función                                                        | Estado                                                   | Alcance y límites                                                                                                                              |
+| -------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Seis prácticas y motor único                                   | Verificado                                               | Reglas de las seis; recorridos completos escritos de cada escenario                                                                            |
+| Roles, cinco dificultades y seis temperamentos                 | Verificado                                               | Contratos y decisiones; la personalidad cambia interacción, no los criterios                                                                   |
+| Preguntas/repreguntas, memoria, reformulación e interrupciones | Verificado por reglas / con doble para LLM               | Calidad de conversación libre con pesos reales pendiente                                                                                       |
+| Comisión con IA local                                          | Con doble                                                | Ollama/OpenAI compatible; los pesos de un LLM no están incluidos en el parche                                                                  |
+| Material PDF, DOCX, PPTX, TXT, MD y TeX                        | Verificado                                               | Multiarquivo y ubicaciones. 60 MiB por archivo; PDF escaneado sin OCR                                                                          |
+| Recuperación léxica/semántica persistente                      | Verificado / con doble para embeddings                   | BM25, vectores, fusión y diversidad. Sin reranker neuronal; no se envía el documento entero por turno                                          |
+| Comparar presentación con tesis                                | Verificado                                               | Reglas orientativas de cobertura/cifras; no certifica exactitud científica                                                                     |
+| Foco de ensayo por diapositiva                                 | Verificado en integración de almacenamiento/recuperación | Selección y navegación en configuración; respaldo de otros documentos, exclusión de otras diapositivas                                         |
+| Inventario de modelos y asignación por tarea                   | Con doble                                                | Ollama y cachés propias; no descubre todas las aplicaciones del sistema                                                                        |
+| Instalar, cancelar, reintentar y desinstalar                   | Con doble                                                | API oficial de Ollama y cachés gestionadas; confirmación, verificación y protección de compartidos                                             |
+| Sustitución segura                                             | Con doble                                                | Una prueba fallida conserva el modelo anterior; anterior se elimina solo con otra confirmación                                                 |
+| Espacio recuperado                                             | Parcial                                                  | Web no mide bytes físicos de Ollama. Comando nativo de lectura existe; no compilado en esta entrega                                            |
+| Hardware y rendimiento                                         | Parcial                                                  | Navegador aproximado; CIM/servicio nativo requieren el equipo Windows real                                                                     |
+| Personas humanas 3D                                            | Verificado con recursos reales                           | Rig, geometría, piel y expresiones; render y movimiento en Chromium con WebGL por software. No fotorrealismo ni modelos GLB personalizados     |
+| Sincronía de voz y avatar                                      | Parcial                                                  | Señales del TTS y visemas aproximados; sin medición perceptual de desfase con voces reales                                                     |
+| Piper y voces del sistema                                      | Con doble / sin verificar con voces reales               | ONNX de prueba y WASM; naturalidad en español no escuchada/medida aquí                                                                         |
+| Whisper local y servicios de STT                               | Sin verificar con pesos reales                           | Descarga e integridad probadas; reconocimiento de habla real pendiente                                                                         |
+| Privacidad inicial                                             | Verificado                                               | Sin solicitudes a proveedores externos por defecto; Whisper ausente no activa reconocimiento en línea                                          |
+| Solo escribir                                                  | Verificado                                               | No solicita micrófono/cámara; no fabrica datos acústicos o corporales                                                                          |
+| Cámara MediaPipe                                               | Sin verificar con personas/modelos reales                | Observaciones de orientación y postura; no inferencia de estados internos                                                                      |
+| Evaluación y rúbricas                                          | Verificado / con doble para apreciaciones LLM            | Citas comprobadas, criterios vacíos respetados, «No evaluado» sin datos; escala orientativa                                                    |
+| Grabación libre e importación                                  | Verificado                                               | Audio de WAV/MP3/OGG/WebM/MP4/M4A/FLAC compatibles; máximo 25 MiB/diez minutos. Del video se analiza audio                                     |
+| Comentarios de contenido de grabaciones                        | Verificado por contratos / E2E con doble                 | Transcripción completa por partes, recuperación y citas. Persistencia en sesión/exportación; interpretación de IA pendiente de revisión humana |
+| Historial y progreso                                           | Verificado                                               | Datos anteriores se conservan; migración de informes personales antiguos no ejecutada aquí                                                     |
+| Uso sin conexión y copias                                      | Verificado                                               | Preparación del shell y copias de sesión; modelos requieren instalación previa. No hay copia única de todo el entorno                          |
+| Navegación, dos temas y accesibilidad                          | Verificado en los recorridos indicados                   | axe WCAG 2.2 AA; no equivale a una certificación exhaustiva ni prueba con todos los apoyos técnicos                                            |
+| GitHub Pages                                                   | Build y subruta verificados                              | No hay backend en Pages; publicación remota no realizada                                                                                       |
+| Atención del público ilustrado                                 | Simulado y declarado                                     | No mide la atención de personas reales                                                                                                         |
+| OCR, reranker neuronal, clonación de voz, GLB personalizados   | No implementado                                          | No se anuncian como funciones disponibles                                                                                                      |
 
-## Decisiones por límites verificables
+## Validación que requiere el equipo real
 
-- **Avatares 3D realistas**: requieren modelos humanos 3D con licencia compatible y blendshapes faciales, que no se pueden descargar ni verificar en este entorno. Se entregó la mejor alternativa realista: avatares 2D vectoriales animados, livianos, accesibles y sin descargas. Se deja preparada la interfaz `AvatarHandle` (boca, modo, reacción, mano levantada) para conectar un renderizador 3D en el futuro.
-- **Reordenamiento neuronal**: no se agregó un reranker. La fusión de rangos con diversidad funciona sin modelos adicionales.
-- **Whisper multihilo**: se usa un hilo para funcionar en GitHub Pages sin cabeceras especiales. Es más lento.
-- **Voz con emoción**: Piper no cambia de emoción. La variación por temperamento se logra con ritmo, altura y pausas.
-
-## Qué falta verificar en un equipo real
-
-1. Conectar Ollama real, instalar y desinstalar un modelo, y comparar el espacio liberado en web y escritorio.
-2. Instalar Whisper y escuchar la calidad de transcripción con voces en español de Chile.
-3. Instalar voces Piper reales y evaluar su naturalidad.
-4. Instalar MediaPipe y probar mirada y postura con una persona frente a la cámara.
-5. Compilar y probar el escritorio en Windows y macOS, incluidos micrófono y cámara.
-6. Calibrar los umbrales de evaluación con evaluadores humanos.
+1. Ejecutar el inventario de solo lectura y verificar sus modelos instalados antes de decidir cambios.
+2. Evaluar preguntas y repreguntas con el LLM real, incluidas referencias, temperamento y calidad académica.
+3. Escuchar voces reales, medir transcripción y sincronía audiovisual en español con micrófono/audífonos.
+4. Revisar cámara, accesibilidad y rendimiento sin inferir ansiedad, mentira o personalidad.
+5. Compilar y probar el escritorio Windows y sus lecturas de espacio, micrófono/cámara y almacenamiento.
+6. Comparar resultados con evaluadores humanos mediante el [protocolo reproducible](BENCHMARK.md).

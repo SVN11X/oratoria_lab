@@ -60,7 +60,10 @@ Los documentos, fragmentos y vectores se guardan en IndexedDB. Los vectores se i
 - **Captura**: un AudioWorklet entrega cuadros PCM para la transcripción local y un AnalyserNode mide el nivel. `MediaSensors` resume voz, cámara y tono cada segundo, separado por fase.
 - **Transcripción**: Whisper en un worker persistente con ONNX Runtime WASM, por fragmentos cortados en pausas; servidor local compatible con OpenAI; o reconocimiento del navegador, declarado como en línea.
 - **Voz**: Piper en un worker (fonemas con espeak-ng WASM e inferencia ONNX), voces del sistema filtradas a locales, servidor local compatible con OpenAI o solo texto. La prosodia cambia con el temperamento. Si la persona habla con audífonos mientras un interlocutor habla, la voz se corta.
-- **Avatares**: personas vectoriales 2D animadas con un único bucle `requestAnimationFrame`: parpadeo, mirada, gestos, expresiones según temperamento y reacciones al tipo de respuesta. La boca usa visemas estimados del texto y la amplitud real del audio. Respetan la reducción de movimiento.
+- **Avatares**: `HumanCommittee` renderiza personas 3D con HumanForge/MakeHuman/MPFB, un contexto WebGL y vistas por participante. Límite de resolución/30 fps; suspensión fuera de vista, al ocultar y en pausa; liberación de recursos al salir. `AvatarHandle` une boca, modo, reacción y mano con TTS y motor. Las ilustraciones SVG se conservan como opción ligera. Ambas respetan reducción de movimiento; la sincronía labial es aproximada.
+- **Modo escrito**: `TextSensors` proporciona un reloj sin permisos, pistas, ticks acústicos ni datos de cámara. El motor, las preguntas y los criterios textuales son los mismos.
+- **Grabaciones**: `evaluateSpeech` revisa la transcripción completa por partes y recupera referencias del índice existente. Descarta citas inventadas y guarda los comentarios en `Session.speechFeedback`, opcional para compatibilidad. Editar o reemplazar la transcripción invalida ese comentario.
+- **Foco documental**: la configuración puede fijar una diapositiva. El recuperador conserva sus fragmentos y excluye las otras diapositivas, usando documentos sin diapositivas como respaldo.
 
 ## Escritorio
 

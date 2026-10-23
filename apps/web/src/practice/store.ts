@@ -22,7 +22,10 @@ export type PracticeSetup = {
   interruptions: boolean;
   openingMinutes: number;
   docIds: string[];
+  focus: { docId: string; slide: number } | null;
   camera: boolean;
+  inputMode: 'voz' | 'texto';
+  avatars: '3d' | 'ilustrados';
   record: boolean;
   indicators: boolean;
   captions: boolean;
@@ -50,7 +53,10 @@ export function defaultSetup(id: ScenarioId): PracticeSetup {
     interruptions: s.defaults.interruptions,
     openingMinutes: s.opening.kind === 'ninguna' ? 0 : s.opening.minutes,
     docIds: [],
-    camera: true,
+    focus: null,
+    camera: false,
+    inputMode: 'voz',
+    avatars: '3d',
     record: true,
     indicators: true,
     captions: true,
@@ -125,6 +131,7 @@ export function toConfig(setup: PracticeSetup): SessionConfig {
     followUps: setup.followUps,
     interruptions: setup.interruptions,
     openingMinutes: Math.max(0, Math.min(60, setup.openingMinutes)),
+    focus: setup.focus && setup.docIds.includes(setup.focus.docId) ? setup.focus : null,
   };
 }
 

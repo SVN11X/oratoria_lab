@@ -79,6 +79,32 @@ export const EvaluationSchema = z.object({
   createdAt: z.string(),
 });
 export type Evaluation = z.infer<typeof EvaluationSchema>;
+export const SpeechFeedbackSchema = z.object({
+  model: z.string().max(300),
+  summary: z.string().max(2000),
+  findings: z
+    .array(
+      z.object({
+        quote: z.string().min(8).max(600),
+        observed: z.string().max(600),
+        improve: z.string().max(600),
+        sources: z
+          .array(
+            z.object({
+              docId: z.string().max(500),
+              docName: z.string().max(500),
+              chunkId: z.string().max(500),
+              location: z.string().max(500),
+              excerpt: z.string().max(2000),
+            }),
+          )
+          .max(4),
+      }),
+    )
+    .max(1000),
+  notes: z.array(z.string().max(2000)).max(20),
+});
+export type SpeechFeedback = z.infer<typeof SpeechFeedbackSchema>;
 export const SessionSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -93,6 +119,7 @@ export const SessionSchema = z
     audio: AudioMetricsSchema.nullable(),
     transcript: TranscriptSchema.nullable(),
     evaluation: EvaluationSchema.nullable(),
+    speechFeedback: SpeechFeedbackSchema.nullable().optional(),
     scenarioId: z.string().nullable(),
   })
   .superRefine((s, ctx) => {

@@ -10,6 +10,7 @@ export default ts.config(
       '**/public/mediapipe/**',
       '**/public/piper/**',
       '**/public/third-party/**',
+      '**/src/vendor/**',
       'playwright-report/**',
       'test-results/**',
     ],

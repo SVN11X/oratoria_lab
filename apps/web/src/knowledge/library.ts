@@ -24,8 +24,9 @@ export const MAX_DOC_BYTES = 60 * 1024 * 1024;
 let pdf: Promise<PdfJs> | null = null;
 async function pdfjs(): Promise<PdfJs> {
   pdf ??= (async () => {
-    const lib = await import('pdfjs-dist');
-    const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+    // La variante legacy mantiene extracción en WebViews y navegadores sin Uint8Array.toHex.
+    const lib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const worker = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
     lib.GlobalWorkerOptions.workerSrc = worker;
     return lib as unknown as PdfJs;
   })();
@@ -119,7 +120,7 @@ export async function embedDocuments(
     const batch = missing.slice(i, i + 16);
     const vectors = await client.embed(
       model,
-      batch.map((c) => c.text.slice(0, 4000)),
+      batch.map((c) => c.text),
       signal,
     );
     await libraryStore.saveVectors(
@@ -141,13 +142,21 @@ export async function vectorCoverage(ids: string[]) {
  * Recuperador para el motor conversacional: búsqueda léxica siempre, más embeddings si el modelo
  * asignado ya procesó los documentos. Si Ollama no responde, sigue con búsqueda léxica.
  */
-export async function makeRetriever(ids: string[]): Promise<{
+export async function makeRetriever(
+  ids: string[],
+  focus?: { docId: string; slide: number } | null,
+): Promise<{
   retrieve: (q: string, k: number) => Promise<RetrievedChunk[]>;
   index: KnowledgeIndex;
   dense: boolean;
 } | null> {
   if (!ids.length) return null;
-  const chunks = await documentChunks(ids);
+  const all = await documentChunks(ids);
+  const focused = focus ? all.filter((c) => c.docId === focus.docId && c.slide === focus.slide) : [];
+  const focusedIds = new Set(focused.map((c) => c.id));
+  const chunks = focus
+    ? all.filter((c) => focusedIds.has(c.id) || (c.docId !== focus.docId && c.slide === null))
+    : all;
   if (!chunks.length) return null;
   const model = useAi.getState().assign.embeddings;
   const vectors = model && useAi.getState().useLlm ? await libraryStore.vectors(model, ids) : null;
@@ -167,15 +176,21 @@ export async function makeRetriever(ids: string[]): Promise<{
           failed = true;
         }
     }
-    return index.search(q, { k, queryVector }).map((h) => ({
-      docId: h.docId,
-      docName: h.docName,
-      chunkId: h.chunkId,
-      location: h.location,
-      excerpt: h.excerpt,
-      text: h.text,
-      score: h.score,
-    }));
+    const hits = index.search(q, { k, queryVector });
+    const anchored = focused
+      .slice(0, Math.min(2, k))
+      .map((c) => ({ ...c, chunkId: c.id, excerpt: c.text.slice(0, 240), score: 1 }));
+    return [...anchored, ...hits.filter((h) => !anchored.some((a) => a.id === h.id))]
+      .slice(0, k)
+      .map((h) => ({
+        docId: h.docId,
+        docName: h.docName,
+        chunkId: h.chunkId,
+        location: h.location,
+        excerpt: h.excerpt,
+        text: h.text,
+        score: h.score,
+      }));
   };
   return { retrieve, index, dense };
 }

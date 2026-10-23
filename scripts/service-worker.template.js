@@ -13,9 +13,9 @@ async function state() {
 }
 async function validBytes(bytes, asset) {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return (
-    bytes.byteLength === asset.bytes &&
-    Array.from(new Uint8Array(digest), (x) => x.toString(16).padStart(2, '0')).join('') === asset.sha256
+  const sha256 = Array.from(new Uint8Array(digest), (x) => x.toString(16).padStart(2, '0')).join('');
+  return [asset, asset.decoded].some(
+    (expected) => expected && bytes.byteLength === expected.bytes && sha256 === expected.sha256,
   );
 }
 async function staticMatch(url, exclude) {

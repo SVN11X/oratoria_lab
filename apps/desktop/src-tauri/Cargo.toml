@@ -1,6 +1,6 @@
 [package]
 name = "oratoria-lab"
-version = "0.1.0"
+version = "0.3.0"
 description = "Entrenamiento local de oratoria"
 authors = ["Oratoria Lab contributors"]
 edition = "2021"

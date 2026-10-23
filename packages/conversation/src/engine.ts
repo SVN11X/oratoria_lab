@@ -215,8 +215,8 @@ export class ConversationEngine {
     return !!text && text.trim().length >= 8 && civilityIssues(text).length === 0;
   }
   private citationsFrom(ids: string[], chunks: RetrievedChunk[]): Citation[] {
-    return ids
-      .map((id) => chunks[Number(id.replace(/\D/g, '')) - 1])
+    return [...new Set(ids)]
+      .map((id) => (/^S[1-9]\d*$/.test(id) ? chunks[Number(id.slice(1)) - 1] : undefined))
       .filter((c): c is RetrievedChunk => !!c)
       .map((c) => ({
         docId: c.docId,

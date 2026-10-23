@@ -133,7 +133,7 @@ function Shell() {
           </Link>
           <p>
             <ShieldCheck size={14} style={{ verticalAlign: '-2px' }} /> Sin cuentas ni telemetría.{' '}
-            {useLlm ? 'Modelos en tu equipo.' : 'Procesamiento local.'} v0.2.0
+            {useLlm ? 'Modelos en tu equipo.' : 'Procesamiento local.'} v0.3.0
           </p>
         </div>
       </aside>

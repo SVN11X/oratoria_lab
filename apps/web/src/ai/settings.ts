@@ -42,7 +42,7 @@ export const DEFAULT_AI: AiSettings = {
   openai: { baseUrl: 'http://localhost:1234/v1', apiKey: '', model: '' },
   profile: 'equilibrado',
   assign: { conversacion: '', evaluacion: '', embeddings: '' },
-  stt: 'navegador',
+  stt: 'escrito',
   tts: 'sistema',
   allowOnlineVoices: false,
   piper: { f: 'piper-es_AR-daniela-high', m: 'piper-es_MX-claude-high' },

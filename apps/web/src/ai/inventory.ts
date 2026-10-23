@@ -26,10 +26,17 @@ const EMPTY: Inventory = {
   error: '',
   checkedAt: '',
 };
+let refreshSequence = 0;
+let inventoryUrl = '';
 export const useInventory = create<Inventory & { refresh: () => Promise<void> }>((set, get) => ({
   ...EMPTY,
   refresh: async () => {
+    const request = ++refreshSequence;
     const client = ollama(useAi.getState());
+    if (inventoryUrl !== client.baseUrl) {
+      inventoryUrl = client.baseUrl;
+      set({ ...EMPTY });
+    }
     set({ state: get().models.length ? 'ok' : 'loading', error: '' });
     try {
       const [version, models, running] = await Promise.all([
@@ -37,6 +44,7 @@ export const useInventory = create<Inventory & { refresh: () => Promise<void> }>
         client.list(),
         client.running(),
       ]);
+      if (request !== refreshSequence) return;
       const shows = new Map(get().shows);
       await Promise.all(
         models
@@ -47,8 +55,10 @@ export const useInventory = create<Inventory & { refresh: () => Promise<void> }>
           }),
       );
       for (const name of [...shows.keys()]) if (!models.some((m) => m.name === name)) shows.delete(name);
+      if (request !== refreshSequence || client.baseUrl !== useAi.getState().ollamaUrl) return;
       set({ state: 'ok', version, models, running, shows, error: '', checkedAt: new Date().toISOString() });
     } catch (e) {
+      if (request !== refreshSequence) return;
       set({
         ...EMPTY,
         state: 'error',

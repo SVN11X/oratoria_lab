@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Play,
@@ -28,12 +28,14 @@ import { ollama } from '../ai/llm';
 import { basePath } from '../services';
 import { browserSttSupported } from '../voice/stt';
 import { MaterialPanel } from '../knowledge/MaterialPanel';
+import { documentChunks } from '../knowledge/library';
 import { visionInstalled } from './vision';
-import { Avatar } from './Avatar';
+import { Avatar, type AvatarHandle } from './Avatar';
 import { makeTts, voiceSpec, STT_TEXT, TTS_TEXT } from './engines';
 import { PRESETS, applyPreset, usePractice, setupFor, type PracticeSetup } from './store';
 
 type Check = { ok: boolean | null; title: string; text: ReactNode };
+const HumanCommittee = lazy(() => import('./HumanCommittee').then((m) => ({ default: m.HumanCommittee })));
 
 export function Setup({
   scenarioId,
@@ -45,11 +47,14 @@ export function Setup({
   const scenario = SCENARIOS[scenarioId];
   const update = usePractice((s) => s.update),
     reset = usePractice((s) => s.reset);
-  const setup = usePractice((s) => s.setups[scenarioId]) ?? setupFor(scenarioId);
+  const savedSetup = usePractice((s) => s.setups[scenarioId]);
+  const initialSetup = useMemo(() => setupFor(scenarioId), [scenarioId]);
+  const setup = savedSetup ?? initialSetup;
   const set = (patch: Partial<PracticeSetup>) => update(scenarioId, patch);
   const ai = useAi();
   const [checks, setChecks] = useState<Check[]>([]);
   const [preset, setPreset] = useState('');
+  const previewHandles = useRef(new Map<string, AvatarHandle>());
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -61,14 +66,16 @@ export function Setup({
         mic = 'unknown';
       }
       list.push({
-        ok: mic === 'granted' ? true : mic === 'denied' ? false : null,
+        ok: setup.inputMode === 'texto' ? true : mic === 'granted' ? true : mic === 'denied' ? false : null,
         title: 'Micrófono',
         text:
-          mic === 'denied'
-            ? 'El permiso está bloqueado. Habilítalo en la barra de direcciones.'
-            : mic === 'granted'
-              ? 'Permiso concedido.'
-              : 'Se pedirá permiso al entrar.',
+          setup.inputMode === 'texto'
+            ? 'Sin acceso al micrófono en esta práctica.'
+            : mic === 'denied'
+              ? 'El permiso está bloqueado. Habilítalo en la barra de direcciones.'
+              : mic === 'granted'
+                ? 'Permiso concedido.'
+                : 'Se pedirá permiso al entrar.',
       });
       const sttModel = ai.stt.startsWith('whisper') ? managed(ai.stt) : undefined;
       const sttOk =
@@ -80,9 +87,12 @@ export function Setup({
               ? browserSttSupported()
               : null;
       list.push({
-        ok: sttOk,
+        ok: setup.inputMode === 'texto' ? true : sttOk,
         title: 'Reconocimiento de voz',
-        text: `${STT_TEXT[ai.stt]}. ${sttOk === false ? (sttModel ? 'No está instalado.' : 'Este navegador no lo tiene.') : ai.stt === 'navegador' ? 'En Chrome y Edge el audio se procesa en servidores de Google o Microsoft.' : ''}`,
+        text:
+          setup.inputMode === 'texto'
+            ? 'Las respuestas se escriben; no se envía audio.'
+            : `${STT_TEXT[ai.stt]}. ${sttOk === false ? (sttModel ? 'No está instalado.' : 'Este navegador no lo tiene.') : ai.stt === 'navegador' ? 'En Chrome y Edge el audio se procesa en servidores de Google o Microsoft.' : ''}`,
       });
       list.push({
         ok: true,
@@ -141,6 +151,7 @@ export function Setup({
     ai.openai.model,
     ai.vision,
     setup.camera,
+    setup.inputMode,
   ]);
 
   const setParticipant = (id: string, patch: Partial<Participant>) =>
@@ -216,6 +227,16 @@ export function Setup({
               </label>
             ))}
             <div className="form-grid">
+              <label className="field">
+                Cómo vas a responder
+                <select
+                  value={setup.inputMode}
+                  onChange={(e) => set({ inputMode: e.target.value as PracticeSetup['inputMode'] })}
+                >
+                  <option value="voz">Hablar y escribir</option>
+                  <option value="texto">Solo escribir (sin micrófono ni cámara)</option>
+                </select>
+              </label>
               {scenario.opening.kind !== 'ninguna' && (
                 <label className="field">
                   {scenario.opening.label} (minutos)
@@ -478,6 +499,33 @@ export function Setup({
           </section>
 
           <section className="panel">
+            <h2>Vista de participantes</h2>
+            <label className="field">
+              Representación de los interlocutores
+              <select
+                value={setup.avatars}
+                onChange={(e) => set({ avatars: e.target.value as PracticeSetup['avatars'] })}
+              >
+                <option value="3d">Personas 3D animadas</option>
+                <option value="ilustrados">Ilustraciones animadas (menor consumo)</option>
+              </select>
+            </label>
+            <p className="caption">
+              La vista 3D utiliza recursos locales. Su apariencia y el temperamento no alteran los criterios
+              de evaluación.
+            </p>
+            {setup.avatars === '3d' && (
+              <Suspense fallback={<p role="status">Cargando vista 3D…</p>}>
+                <HumanCommittee
+                  participants={setup.participants}
+                  handles={previewHandles}
+                  onFallback={() => set({ avatars: 'ilustrados' })}
+                />
+              </Suspense>
+            )}
+          </section>
+
+          <section className="panel">
             <h2>Material</h2>
             <p className="caption">
               Opcional, pero recomendado: las preguntas se basan en tu material y citan la página, diapositiva
@@ -489,6 +537,7 @@ export function Setup({
               hint={scenario.materialHint}
               compact={!setup.advanced}
             />
+            <SlideFocus docIds={setup.docIds} focus={setup.focus} onChange={(focus) => set({ focus })} />
           </section>
 
           {setup.advanced && (
@@ -666,5 +715,85 @@ export function Setup({
         </aside>
       </div>
     </>
+  );
+}
+
+function SlideFocus({
+  docIds,
+  focus,
+  onChange,
+}: {
+  docIds: string[];
+  focus: PracticeSetup['focus'];
+  onChange: (focus: PracticeSetup['focus']) => void;
+}) {
+  const [slides, setSlides] = useState<{ docId: string; slide: number; title: string }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void documentChunks(docIds)
+      .then((chunks) => {
+        if (!alive) return;
+        const bySlide = new Map<string, (typeof slides)[number]>();
+        for (const c of chunks)
+          if (c.slide !== null) {
+            const key = `${c.docId}:${c.slide}`;
+            if (!bySlide.has(key))
+              bySlide.set(key, {
+                docId: c.docId,
+                slide: c.slide,
+                title: `${c.docName} · Diapositiva ${c.slide}${c.section ? ` · ${c.section}` : ''}`,
+              });
+          }
+        setSlides([...bySlide.values()].sort((a, b) => a.docId.localeCompare(b.docId) || a.slide - b.slide));
+      })
+      .catch(() => alive && setSlides([]));
+    return () => {
+      alive = false;
+    };
+  }, [docIds]);
+  if (!slides.length) return null;
+  const index = slides.findIndex((s) => s.docId === focus?.docId && s.slide === focus.slide);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <label className="field">
+        Foco del ensayo
+        <select
+          value={index < 0 ? '' : String(index)}
+          onChange={(e) => {
+            const s = e.target.value === '' ? null : slides[Number(e.target.value)];
+            onChange(s ? { docId: s.docId, slide: s.slide } : null);
+          }}
+        >
+          <option value="">Presentación completa</option>
+          {slides.map((s, i) => (
+            <option value={i} key={`${s.docId}:${s.slide}`}>
+              {s.title}
+            </option>
+          ))}
+        </select>
+      </label>
+      {index >= 0 && (
+        <div className="actions">
+          <button
+            className="button secondary small"
+            disabled={index === 0}
+            onClick={() => onChange(slides[index - 1]!)}
+          >
+            Diapositiva anterior
+          </button>
+          <button
+            className="button secondary small"
+            disabled={index === slides.length - 1}
+            onClick={() => onChange(slides[index + 1]!)}
+          >
+            Diapositiva siguiente
+          </button>
+        </div>
+      )}
+      <p className="caption">
+        Ensaya una diapositiva y contrasta sus afirmaciones con la tesis u otros documentos seleccionados. Al
+        repetir puedes pasar a la siguiente.
+      </p>
+    </div>
   );
 }

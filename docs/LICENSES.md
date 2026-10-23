@@ -1,5 +1,7 @@
 # Licencias y procedencia
 
+Actualización 0.3.0: Three.js 0.180.0 (MIT, [texto](third-party/three-LICENSE)); runtime HumanForge 0.8.1 fijado al commit `2226df1f50a04c5a8e1c02ea33780d28337dfbb1` (MIT, [texto](third-party/humanforge-LICENSE)); recursos humanos MakeHuman/MPFB CC0-1.0 ([procedencia individual](third-party/humanforge-ASSETS.md)). Selección y SHA-256 en `apps/web/public/avatars/PROVENANCE.json`. Los archivos integrados y su generación están documentados en `apps/web/src/vendor/humanforge/UPSTREAM.md`. Vitest se actualiza a 4.1.12; el resto de las versiones se consulta en el lockfile.
+
 El código de Oratoria Lab se entrega bajo MIT. Las dependencias conservan sus propias licencias; este inventario se obtiene de package.json del árbol instalado. Las versiones exactas e integridades de paquetes están en pnpm-lock.yaml. Los textos de licencia/NOTICE disponibles se conservan en third-party y se copian como recursos de distribución durante build.
 
 | Dependencia                 | Versión                        | SPDX declarado                            | Textos conservados                                                                        |

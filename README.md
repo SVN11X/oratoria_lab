@@ -1,6 +1,6 @@
 # Oratoria Lab
 
-Plataforma gratuita y privada para entrenar conversaciones que importan, con foco en la **defensa de tesis**. Simula una comisión, una entrevista o una audiencia que escucha, pregunta y repregunta, y entrega un informe con evidencias y ejercicios. Todo se procesa en tu equipo: sin cuentas, sin telemetría y sin servicios de pago obligatorios.
+Plataforma gratuita para entrenar conversaciones, con foco en la **defensa de tesis**. Simula una comisión, una entrevista o una audiencia y entrega un informe con evidencias y ejercicios. Procesamiento local por defecto, sin cuentas, telemetría ni servicios de pago obligatorios. El reconocimiento del navegador en línea y los servidores externos requieren una elección explícita.
 
 Estado real de cada función y de cada prueba: [docs/STATUS.md](docs/STATUS.md).
 
@@ -11,10 +11,13 @@ Estado real de cada función y de cada prueba: [docs/STATUS.md](docs/STATUS.md).
 - **Material académico**: carga tu tesis, tu presentación, bibliografía o instrucciones en PDF, DOCX, PPTX, TXT, Markdown o LaTeX, sin límite de caracteres. Las preguntas citan la página, diapositiva o sección y detectan cifras que no coinciden con tu documento. También puedes comparar tu presentación con la tesis.
 - **Informe**: criterios con nivel, evidencia literal y método. Los criterios sin datos quedan como «No evaluado». Incluye línea de tiempo de la conversación, video opcional y ejercicios recomendados.
 - **Mi progreso**: tendencias por criterio, comparación con la sesión anterior del mismo tipo y habilidades prioritarias.
+- **Personas 3D animadas**: apariencias humanas, expresiones, parpadeo, movimiento corporal y sincronía labial aproximada, con recursos locales. Ilustraciones para equipos con menos recursos.
+- **Ensayo por diapositiva**: centra las preguntas en una diapositiva y contrástala con la tesis seleccionada.
+- **Solo escribir**: una práctica sin micrófono, cámara ni métricas vocales inventadas.
 - **Práctica libre y análisis de grabaciones**: graba o importa un audio y mide ritmo, pausas, volumen, muletillas y estructura.
 - **Modelos de IA** (Configuración): revisa los modelos que ya tienes en Ollama antes de recomendar descargas, asigna un modelo a cada función, instala y desinstala con la API oficial de Ollama y administra Whisper, voces Piper y MediaPipe.
 
-Sin ningún modelo instalado todo funciona: los interlocutores usan reglas, las respuestas pueden escribirse y el análisis de voz es local.
+Sin modelos puedes entrenar con reglas y respuestas escritas y medir audio localmente. La conversación con IA, la transcripción Whisper y las voces Piper necesitan sus modelos. No se instala ni elimina ninguno automáticamente.
 
 ## Usar la versión web
 
@@ -45,10 +48,13 @@ pnpm typecheck
 pnpm test                # Vitest
 pnpm build && pnpm verify:build
 pnpm exec playwright install --with-deps chromium
-pnpm test:e2e            # 17 recorridos en Chromium
+pnpm test:e2e            # recorridos en Chromium; incluye los seis escenarios
+pnpm verify:avatars     # integridad de los recursos humanos incluidos
 ```
 
 Si ya tienes Chromium instalado, puedes indicar su ruta con `PW_CHROMIUM_PATH=/ruta/a/chromium pnpm test:e2e`. Las pruebas de extremo a extremo usan un servidor que imita la API de Ollama y archivos de prueba para los modelos: no descargan nada.
+
+Para incluir la prueba de renderizado 3D por software: `$env:PW_SOFTWARE_GL = '1'; pnpm test:e2e`. [Auditoría V2](docs/AUDITORIA-V2.md), [entrega y comandos PowerShell](docs/ENTREGA-0.3.0.md), [benchmark local](docs/BENCHMARK.md).
 
 Build para una subcarpeta (GitHub Pages): `VITE_BASE_PATH=/oratoria_lab/ pnpm build`. En PowerShell: `$env:VITE_BASE_PATH = '/oratoria_lab/'; pnpm build`.
 
@@ -81,6 +87,6 @@ Más detalle: [ARCHITECTURE](docs/ARCHITECTURE.md), [PRIVACY](docs/PRIVACY.md), 
 
 ## Límites
 
-Las mediciones de voz, mirada y postura son estimaciones técnicas, no juicios sobre la persona. Los umbrales del informe son referencias para practicar, no valores validados con evaluadores. La calidad de las preguntas con IA depende del modelo que tu equipo pueda ejecutar. No hay avatares 3D realistas en esta versión.
+Las mediciones de voz, orientación y postura son estimaciones técnicas, no juicios sobre la persona. Los umbrales son referencias para practicar sin validación con evaluadores. La calidad de IA depende del modelo instalado. Los humanos 3D no son fotorrealistas; la sincronía labial es aproximada. Las pruebas con modelos reales y el build nativo Windows quedan pendientes.
 
 Código bajo licencia MIT. El componente de fonemas de Piper incluye eSpeak NG (GPL-3.0); ver [LICENSES](docs/LICENSES.md).

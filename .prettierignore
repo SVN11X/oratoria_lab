@@ -9,5 +9,7 @@ apps/web/public/mediapipe
 apps/web/public/piper
 apps/web/public/third-party
 docs/third-party
+apps/web/src/vendor
+apps/web/public/avatars
 apps/desktop/src-tauri/gen
 apps/desktop/src-tauri/Cargo.lock

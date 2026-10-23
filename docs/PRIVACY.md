@@ -51,3 +51,9 @@ Cada sesión se elimina desde el historial con confirmación. **Configuración �
 ## Interpretación de resultados
 
 Las mediciones (ritmo, pausas, volumen, mirada) son estimaciones técnicas, no juicios sobre la persona. Los criterios sin datos suficientes aparecen como «No evaluado». El evaluador con IA no recibe el temperamento de los interlocutores y sus valoraciones se descartan si citan frases que no aparecen literalmente en la transcripción. Los tests usan solo datos ficticios y la app nunca los inserta en tu historial.
+
+## Cambios 0.3.0
+
+El reconocimiento en línea deja de ser la configuración inicial y no se usa como sustituto automático de Whisper ausente. «Solo escribir» evita solicitar medios. La cámara comienza apagada para configuraciones nuevas. Las selecciones explícitas anteriores se conservan al actualizar.
+
+Los recursos de personas 3D son archivos del propio sitio; no existe un servicio remoto de generación de avatares ni se envían imágenes del usuario. Los comentarios de grabaciones se guardan localmente en la sesión y pueden incluir fragmentos de material aportado: se incluyen en sus exportaciones. Editar la transcripción invalida el comentario anterior.

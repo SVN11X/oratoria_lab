@@ -4,12 +4,12 @@ Oratoria Lab funciona sin ningún modelo: los interlocutores usan el motor de re
 
 ## Sin modelos
 
-| Recurso   | Mínimo razonable                                                             |
-| --------- | ---------------------------------------------------------------------------- |
-| Navegador | Chrome, Edge o Firefox actuales. Safari con limitaciones de MediaRecorder    |
-| RAM       | 4 GB                                                                         |
-| Disco     | Unos 55 MB si preparas el uso sin conexión, más tus grabaciones y documentos |
-| Red       | Solo para abrir la web la primera vez. La app de escritorio no la necesita   |
+| Recurso   | Mínimo razonable                                                                     |
+| --------- | ------------------------------------------------------------------------------------ |
+| Navegador | Chrome, Edge o Firefox actuales. Safari con limitaciones de MediaRecorder            |
+| RAM       | 4 GB                                                                                 |
+| Disco     | Unos 61,3 MiB de descarga para el shell offline, más caché, grabaciones y documentos |
+| Red       | Solo para abrir la web la primera vez. La app de escritorio no la necesita           |
 
 ## Perfiles de modelos
 
@@ -48,3 +48,9 @@ Whisper y Piper usan un solo hilo para no exigir cabeceras COOP/COEP, que GitHub
 | Ollama desde la web publicada       | Con `OLLAMA_ORIGINS`              | Con `OLLAMA_ORIGINS` | Con `OLLAMA_ORIGINS`            |
 
 Estas columnas resumen el soporte esperado según las APIs que usa la app. En esta entrega solo se ejecutaron pruebas automáticas en Chromium.
+
+## Actualización 0.3.0
+
+Los archivos del shell verificado de esta entrega suman aproximadamente 61,3 MiB, incluyendo bibliotecas WASM y recursos humanos, antes de instalar modelos. Algunos recursos ya están comprimidos con gzip: la caché puede guardar su representación descomprimida según el servidor y ocupar más espacio. Ambas representaciones se verifican por SHA-256. Los recursos humanos seleccionados suman 6,65 MB; sus geometrías y texturas consumen memoria adicional al cargarse. La vista usa un contexto WebGL y limita resolución y animación; se suspende al quedar fuera de la vista, al ocultar la pestaña o pausar. Elige ilustraciones para reducir consumo. No se ha medido un mínimo de GPU/RAM para todas las comisiones en hardware del usuario.
+
+La configuración inicial usa respuestas escritas y cámara apagada. «Solo escribir» permite entrenar sin pedir micrófono ni cámara. Para reconocimiento local hay que seleccionar un Whisper instalado; si falta, la aplicación no cambia a reconocimiento en línea automáticamente.

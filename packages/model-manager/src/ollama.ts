@@ -138,6 +138,13 @@ export class OllamaClient {
     const decoder = new TextDecoder();
     let buffer = '',
       success = false;
+    const consume = (line: string) => {
+      if (!line.trim()) return;
+      const data = JSON.parse(line) as PullProgress & { error?: string };
+      if (data.error) throw new OllamaError(`Ollama: ${data.error}`);
+      if (data.status === 'success') success = true;
+      onProgress(data);
+    };
     try {
       for (;;) {
         const { value, done } = await reader.read();
@@ -147,17 +154,16 @@ export class OllamaClient {
         while ((nl = buffer.indexOf('\n')) >= 0) {
           const line = buffer.slice(0, nl).trim();
           buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          const data = JSON.parse(line) as PullProgress & { error?: string };
-          if (data.error) throw new OllamaError(`Ollama: ${data.error}`);
-          if (data.status === 'success') success = true;
-          onProgress(data);
+          consume(line);
         }
       }
+      consume(buffer + decoder.decode());
+      signal?.throwIfAborted();
     } catch (error) {
       if (signal?.aborted) throw new DOMException('Descarga cancelada.', 'AbortError');
       throw error;
     } finally {
+      await reader.cancel().catch(() => undefined);
       reader.releaseLock();
     }
     if (!success) throw new OllamaError('La descarga terminó sin confirmación de Ollama.');
@@ -232,7 +238,8 @@ export class OllamaClient {
       method: 'POST',
       signal,
       timeoutMs: 120000,
-      body: JSON.stringify({ model, input, keep_alive: '10m' }),
+      // El proveedor debe rechazar un fragmento que no cabe, nunca truncarlo silenciosamente.
+      body: JSON.stringify({ model, input, truncate: false, keep_alive: '2m' }),
     });
     if (!r.embeddings?.length || r.embeddings.length !== input.length)
       throw new OllamaError('Ollama no devolvió los vectores esperados.');

@@ -16,7 +16,8 @@ import {
 import type { EChartsOption } from 'echarts';
 import { newSession, formatDuration, errorMessage, type AudioMetrics, type Transcript } from '@oratoria/core';
 import { analyzeText, coachingNotes } from '@oratoria/evaluation';
-import { contentPrompt, parseContent, keyTerms, normalize, type ContentFeedback } from '@oratoria/defense';
+import { keyTerms, normalize } from '@oratoria/defense';
+import { evaluateSpeech, type SpeechFeedback } from '@oratoria/conversation';
 import { managed } from '@oratoria/model-manager';
 import { store } from '@oratoria/storage';
 import { downloadBlob, safeFilename } from '@oratoria/export';
@@ -27,7 +28,7 @@ import { usePreferences, useSessions } from '../state';
 import { useAi } from '../ai/settings';
 import { llmFor } from '../ai/llm';
 import { MaterialPanel } from '../knowledge/MaterialPanel';
-import { documentChunks } from '../knowledge/library';
+import { documentChunks, makeRetriever } from '../knowledge/library';
 import { bestWhisper } from '../practice/engines';
 
 const STRUCTURE: [string, RegExp][] = [
@@ -57,7 +58,7 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
     [pcm, setPcm] = useState<Float32Array | null>(null),
     [transcript, setTranscript] = useState<Transcript | null>(null),
     [manual, setManual] = useState(''),
-    [content, setContent] = useState<ContentFeedback | null>(null),
+    [content, setContent] = useState<SpeechFeedback | null>(null),
     [docIds, setDocIds] = useState<string[]>([]),
     [coverage, setCoverage] = useState<{ covered: string[]; missing: string[] } | null>(null),
     [busy, setBusy] = useState(''),
@@ -78,6 +79,8 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
     setName(`grabacion.${b.type.includes('mp4') ? 'm4a' : b.type.includes('ogg') ? 'ogg' : 'webm'}`);
     setMetrics(null);
     setTranscript(null);
+    setManual('');
+    setContent(null);
     setError('');
   });
   const recording = recorder.mode !== 'idle';
@@ -117,19 +120,29 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
   const notes = useMemo(() => coachingNotes(metrics, text?.a ?? null), [metrics, text]);
   const previous = sessions.find((s) => s.source === source && s.audio && s.transcript && s.title !== title);
   useEffect(() => {
+    let alive = true;
     if (!docIds.length || !full) {
       setCoverage(null);
       return;
     }
-    void documentChunks(docIds).then((chunks) => {
-      const terms = keyTerms(chunks.map((c) => c.text).join(' '), 15);
-      const said = normalize(full);
-      setCoverage({
-        covered: terms.filter((t) => said.includes(normalize(t))),
-        missing: terms.filter((t) => !said.includes(normalize(t))),
-      });
-    });
+    void documentChunks(docIds)
+      .then((chunks) => {
+        if (!alive) return;
+        const terms = keyTerms(chunks.map((c) => c.text).join(' '), 15);
+        const said = normalize(full);
+        setCoverage({
+          covered: terms.filter((t) => said.includes(normalize(t))),
+          missing: terms.filter((t) => !said.includes(normalize(t))),
+        });
+      })
+      .catch(() => alive && setCoverage(null));
+    return () => {
+      alive = false;
+    };
   }, [docIds, full]);
+  useEffect(() => {
+    setContent(null);
+  }, [full, docIds, goal]);
   async function analyze() {
     if (!blob) return;
     setError('');
@@ -172,28 +185,25 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
     const llm = llmFor('evaluacion');
     if (!llm || !full) return;
     setBusy(`El modelo ${llm.model} revisa el contenido…`);
+    setError('');
+    abort.current = new AbortController();
     try {
-      const material = docIds.length
-        ? (await documentChunks(docIds))
-            .map((c) => c.text)
-            .join('\n')
-            .slice(0, 5000)
-        : '';
-      const raw = await llm.complete(
-        contentPrompt({
-          title,
-          summary: [goal, material].filter(Boolean).join('\n\n'),
-          exposition: full,
-          answers: [],
-          difficulty: 'estandar',
-        }),
-        { json: true, timeoutMs: 120000, temperature: 0.3 },
-      );
-      setContent({ model: llm.model, ...parseContent(raw) });
+      const retriever = await makeRetriever(docIds);
+      const result = await evaluateSpeech({
+        text: full,
+        title,
+        goal,
+        llm,
+        retrieve: retriever?.retrieve,
+        signal: abort.current.signal,
+        onProgress: (part, total) =>
+          mounted.current && setBusy(`Revisando el contenido: parte ${part} de ${total}…`),
+      });
+      if (mounted.current) setContent(result);
     } catch (e) {
-      setError(`No se obtuvo el comentario del modelo: ${errorMessage(e)}`);
+      if (mounted.current) setError(`No se obtuvo el comentario del modelo: ${errorMessage(e)}`);
     } finally {
-      setBusy('');
+      if (mounted.current) setBusy('');
     }
   }
   async function save() {
@@ -209,6 +219,7 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
         audioBytes: blob.size,
         audio: metrics,
         transcript: text?.t ?? null,
+        speechFeedback: content,
       });
       await store.save(session, blob);
       await reload();
@@ -387,6 +398,8 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
                     setName(file.name);
                     setMetrics(null);
                     setTranscript(null);
+                    setManual('');
+                    setContent(null);
                     setError('');
                   }}
                 />
@@ -655,19 +668,42 @@ export function FreePractice({ mode }: { mode: 'record' | 'import' }) {
             {content && (
               <div className="panel soft" style={{ marginTop: 12 }}>
                 <span className="eyebrow">Comentario del modelo {content.model}</span>
-                <p style={{ color: 'var(--text)' }}>{content.resumen}</p>
-                <div className="grid-2">
-                  <ul className="plain-list">
-                    {content.fortalezas.map((s) => (
-                      <li key={s}>{s}</li>
+                <p style={{ color: 'var(--text)' }}>{content.summary}</p>
+                {content.findings.map((f, i) => (
+                  <article key={i} className="panel">
+                    <blockquote>«{f.quote}»</blockquote>
+                    <p>{f.observed}</p>
+                    <p>
+                      <strong>Para practicar:</strong> {f.improve}
+                    </p>
+                    {f.sources.map((s) => (
+                      <blockquote key={s.chunkId} className="source-quote">
+                        «{s.excerpt}»
+                        <small>
+                          {s.docName} · {s.location}
+                        </small>
+                      </blockquote>
                     ))}
-                  </ul>
-                  <ul className="plain-list">
-                    {content.mejoras.map((s) => (
-                      <li key={s}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
+                  </article>
+                ))}
+                {content.notes.map((n) => (
+                  <p className="caption" key={n}>
+                    {n}
+                  </p>
+                ))}
+                <button
+                  className="button secondary small"
+                  onClick={() =>
+                    downloadBlob(
+                      new Blob([JSON.stringify({ title, goal, feedback: content }, null, 2)], {
+                        type: 'application/json',
+                      }),
+                      `${safeFilename(title)}-comentarios.json`,
+                    )
+                  }
+                >
+                  <Download size={15} /> Exportar comentarios con evidencias
+                </button>
                 <p className="caption">Apreciación automática: revísala con criterio.</p>
               </div>
             )}

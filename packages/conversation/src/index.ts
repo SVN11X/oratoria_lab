@@ -8,3 +8,4 @@ export * from './rules';
 export * from './engine';
 export * from './evaluation';
 export * from './coach';
+export * from './speech';

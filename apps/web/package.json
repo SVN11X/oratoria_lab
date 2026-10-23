@@ -1,12 +1,12 @@
 {
   "name": "@oratoria/web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev": "vite --host localhost --port 5173 --strictPort",
     "build": "node ../../scripts/copy-wasm.mjs && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort"
+    "preview": "vite preview --host localhost --port 4173 --strictPort"
   },
   "dependencies": {
     "@diffusionstudio/piper-wasm": "1.0.0",
@@ -32,6 +32,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-router-dom": "7.18.4",
+    "three": "0.180.0",
     "zod": "4.6.7",
     "zustand": "5.0.15"
   }

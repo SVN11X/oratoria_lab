@@ -23,6 +23,7 @@ test('defensa de tesis con material, reglas, respuestas escritas e informe guard
   const external = trackExternal(page);
   await presetAi(page, { stt: 'escrito', tts: 'texto' });
   await page.goto('/#/practice/tesis');
+  await page.getByLabel('Representación de los interlocutores').selectOption('ilustrados');
   await expect(page.getByRole('heading', { name: 'Defensa de tesis', exact: true })).toBeVisible();
   await page.getByLabel('Título de la tesis').fill('Robot de navegación autónoma para bodegas');
   await page.getByLabel('Elegir archivos de material académico').setInputFiles({
@@ -77,6 +78,7 @@ test('defensa de tesis con material, reglas, respuestas escritas e informe guard
 test('entrevista laboral sin presentación inicial y salida sin guardar', async ({ page }) => {
   await presetAi(page, { stt: 'escrito', tts: 'texto' });
   await page.goto('/#/practice/entrevista');
+  await page.getByLabel('Representación de los interlocutores').selectOption('ilustrados');
   await page.getByLabel('Cargo al que postulas').fill('Analista de datos');
   await page.getByLabel('Preséntate brevemente (minutos)').selectOption('0');
   await page.getByLabel('Preguntas principales').selectOption('2');

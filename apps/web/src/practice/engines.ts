@@ -78,17 +78,13 @@ export async function makeStt(
     const m = managed(s.stt);
     if (m && (await managedStatus(m, basePath)).installed)
       return { stt: new WhisperStt(s.stt, h), warning: '' };
-    if (browserSttSupported())
-      return {
-        stt: new BrowserStt(h, clock),
-        warning: `${m?.name ?? 'Whisper'} no está instalado. Se usa el reconocimiento del navegador (en línea).`,
-      };
     return {
       stt: null,
       warning: `${m?.name ?? 'Whisper'} no está instalado. Escribe lo esencial de tus respuestas o instálalo en Configuración → Modelos de IA.`,
     };
   }
-  if (browserSttSupported()) return { stt: new BrowserStt(h, clock), warning: '' };
+  // Solo la elección explícita «navegador» autoriza usar reconocimiento en línea.
+  if (s.stt === 'navegador' && browserSttSupported()) return { stt: new BrowserStt(h, clock), warning: '' };
   return {
     stt: null,
     warning:

@@ -182,10 +182,12 @@ export class Bm25 {
   }
 }
 export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
+  if (!a.length || a.length !== b.length) return 0;
   let dot = 0,
     na = 0,
     nb = 0;
   for (let i = 0; i < a.length; i++) {
+    if (!Number.isFinite(a[i]) || !Number.isFinite(b[i])) return 0;
     dot += a[i]! * b[i]!;
     na += a[i]! * a[i]!;
     nb += b[i]! * b[i]!;

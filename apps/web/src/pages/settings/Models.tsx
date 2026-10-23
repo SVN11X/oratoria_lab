@@ -480,7 +480,13 @@ function ProfilePanel() {
 }
 
 /* ============================ Inventario de Ollama ============================ */
-type Uninstall = { item: AuditItem; model: OllamaModel; roles: ChatRole[]; replacement: string };
+type Uninstall = {
+  item: AuditItem;
+  model: OllamaModel;
+  roles: ChatRole[];
+  replacement: string;
+  server: string;
+};
 type Substitute = {
   from: string;
   to: string;
@@ -519,18 +525,30 @@ function InventoryPanel() {
   /** Desinstalación real con la API oficial; verifica el resultado y mide el espacio en escritorio. */
   async function uninstall(u: Uninstall) {
     await run(`rm:${u.model.name}`, async () => {
+      if (useAi.getState().ollamaUrl !== u.server)
+        throw new Error('La conexión cambió. Revisa el inventario y confirma de nuevo el modelo.');
       const client = ollama();
-      if (inv.running.some((r) => r.name === u.model.name))
-        await client.unload(u.model.name).catch(() => undefined);
+      const current = (await client.list()).find((m) => m.name === u.model.name);
+      if (!current || current.digest !== u.model.digest)
+        throw new Error(
+          'El modelo cambió desde la confirmación. Actualiza el inventario antes de eliminarlo.',
+        );
+      if (inv.running.some((r) => r.name === u.model.name)) await client.unload(u.model.name);
+      if ((await client.running()).some((r) => r.name === u.model.name))
+        throw new Error(
+          'El modelo sigue cargado. Detén su uso en otras aplicaciones antes de desinstalarlo.',
+        );
       const before = await ollamaStorage();
       await client.remove(u.model.name);
       const after = await client.list();
       if (after.some((m) => m.name === u.model.name))
         throw new Error('Ollama no confirmó la eliminación. El modelo sigue instalado.');
       const afterDisk = await ollamaStorage();
-      const assign: AiSettings['assign'] = { ...ai.assign };
-      for (const r of u.roles) assign[r] = u.replacement;
-      ai.update({ assign });
+      if (useAi.getState().ollamaUrl === u.server) {
+        const assign = { ...useAi.getState().assign };
+        for (const r of ROLES) if (modelMatches(assign[r], u.model.name)) assign[r] = u.replacement;
+        ai.update({ assign });
+      }
       setRemoving(null);
       await inv.refresh();
       const freed =
@@ -543,6 +561,7 @@ function InventoryPanel() {
 
   /** Sustitución: descargar → probar → reasignar → preguntar si eliminar el anterior. */
   async function substitute(s: Substitute) {
+    const server = useAi.getState().ollamaUrl;
     setSubst({ ...s, step: 'descargando', message: '' });
     const ok = inv.models.some((m) => modelMatches(m.name, s.to)) || (await pullModel(s.to));
     if (!ok) {
@@ -559,13 +578,37 @@ function InventoryPanel() {
     if (!isEmbeddingModel({ name: s.to })) {
       try {
         const b = await benchmark(s.to);
+        if (!b.jsonOk || !b.spanishOk) throw new Error('El modelo no superó la prueba de JSON y español.');
         note = `Prueba: ${b.totalSec} s${b.tokensPerSec ? `, ${b.tokensPerSec} tokens/s` : ''}, JSON ${b.jsonOk ? 'válido' : 'no válido'}.`;
       } catch (e) {
-        note = `La prueba falló: ${e instanceof Error ? e.message : 'error'}.`;
+        setSubst({
+          ...s,
+          step: 'error',
+          message: `Se conserva el modelo actual. La prueba falló: ${e instanceof Error ? e.message : 'error'}.`,
+        });
+        return;
+      }
+    } else {
+      try {
+        const vectors = await ollama().embed(s.to, ['Comprobar recuperación de material académico']);
+        if (!vectors[0]?.length || !vectors[0].every(Number.isFinite))
+          throw new Error('El vector no es válido.');
+        note = 'El modelo devolvió un vector válido en la prueba de embeddings.';
+      } catch (e) {
+        setSubst({
+          ...s,
+          step: 'error',
+          message: `Se conserva el modelo actual: ${e instanceof Error ? e.message : 'falló la prueba'}.`,
+        });
+        return;
       }
     }
+    if (useAi.getState().ollamaUrl !== server) {
+      setSubst({ ...s, step: 'error', message: 'La conexión cambió. Se conserva la asignación actual.' });
+      return;
+    }
     const name = useInventory.getState().models.find((m) => modelMatches(m.name, s.to))?.name ?? s.to;
-    const assign: AiSettings['assign'] = { ...ai.assign };
+    const assign: AiSettings['assign'] = { ...useAi.getState().assign };
     for (const r of ROLES) if (assign[r] && modelMatches(assign[r], s.from)) assign[r] = name;
     ai.update({ assign });
     setSubst({ ...s, to: name, step: 'reasignado', message: note });
@@ -733,7 +776,7 @@ function InventoryPanel() {
                             isEmbeddingModel(m, inv.shows.get(m.name)?.capabilities) ===
                               item.tasks.includes('embeddings'),
                         )?.name ?? '';
-                      setRemoving({ item, model, roles, replacement });
+                      setRemoving({ item, model, roles, replacement, server: ai.ollamaUrl });
                     }}
                   >
                     <Trash2 size={15} /> Desinstalar
@@ -782,7 +825,12 @@ function InventoryPanel() {
               >
                 <option value="">Ninguno (usar reglas)</option>
                 {inv.models
-                  .filter((m) => m.name !== removing.model.name)
+                  .filter(
+                    (m) =>
+                      m.name !== removing.model.name &&
+                      isEmbeddingModel(m, inv.shows.get(m.name)?.capabilities) ===
+                        removing.item.tasks.includes('embeddings'),
+                  )
                   .map((m) => (
                     <option key={m.name} value={m.name}>
                       {m.name}
@@ -804,7 +852,13 @@ function InventoryPanel() {
             const item = audit.items.find((i) => i.name === subst.from);
             setSubst(null);
             if (model && item)
-              setRemoving({ item, model, roles: rolesOf(subst.from), replacement: subst.to });
+              setRemoving({
+                item,
+                model,
+                roles: rolesOf(subst.from),
+                replacement: subst.to,
+                server: ai.ollamaUrl,
+              });
           }}
         />
       )}

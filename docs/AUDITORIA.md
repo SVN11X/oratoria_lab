@@ -1,5 +1,7 @@
 # Auditoría técnica del repositorio (Fase 0)
 
+Auditoría histórica. Para la revisión y cambios del 23 de octubre de 2026, consultar [AUDITORIA-V2](AUDITORIA-V2.md) y [STATUS](STATUS.md).
+
 Fecha: 17 de octubre de 2026. Commit de partida: `6861e06` (rama `main`). Esta auditoría se hizo leyendo todo el código fuente y ejecutando las comprobaciones existentes antes de modificar nada. Las cifras de esta página son resultados reales del entorno de trabajo, no estimaciones.
 
 ## Cómo está construido

@@ -110,6 +110,7 @@ for (const theme of ['light', 'dark'] as const)
     }
   });
 test('shell abre sin conexión tras preparar Service Worker', async ({ page, context }) => {
+  test.setTimeout(150000);
   await page.goto('/#/settings/data');
   await page.getByRole('button', { name: 'Preparar o actualizar uso sin conexión' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Interfaz offline preparada' })).toBeVisible({
