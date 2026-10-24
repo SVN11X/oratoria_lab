@@ -1,3 +1,5 @@
+> **Corrección de voz y transcripción:** consulta [CORRECCION-VOZ](CORRECCION-VOZ.md) para el incremento sobre `df74b2a`: revisión de bucles, evaluación por bloques y Piper por fragmentos cortos.
+>
 > **Modernización incremental:** consulta [MODERNIZACION](MODERNIZACION.md) para la implementación sobre `9fe3ad1`, los resultados nuevos y sus límites. El estado 0.3.0 de abajo se conserva como referencia histórica.
 
 # Estado real de Oratoria Lab 0.3.0

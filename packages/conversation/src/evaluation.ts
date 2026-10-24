@@ -1,7 +1,8 @@
 import { normalize, words } from '@oratoria/defense';
 import type { Finding } from '@oratoria/defense';
 import { contentTerms, overlap } from './analysis';
-import { EvaluationSchema, EVALUATION_JSON_SCHEMA, evaluationPrompt, extractJson } from './prompts';
+import { EvaluationSchema, evaluationJsonSchema, evaluationPrompt, extractJson } from './prompts';
+import { transcriptQuality } from './transcript-quality';
 import { SCENARIOS } from './scenarios';
 import type { EngineSnapshot } from './engine';
 import type { CriterionDef, Dimension, LlmPort, TurnRecord } from './types';
@@ -32,7 +33,12 @@ export const DIMENSION_NAMES: Record<Dimension, string> = {
 
 type Answered = TurnRecord & { answer: NonNullable<TurnRecord['answer']> };
 const answered = (s: EngineSnapshot) =>
-  s.turns.filter((t): t is Answered => !!t.answer && t.answer.text.trim().length > 0);
+  s.turns.filter(
+    (t): t is Answered =>
+      !!t.answer &&
+      t.answer.text.trim().length > 0 &&
+      (t.answer.transcriptReviewed || !transcriptQuality(t.answer.text).review),
+  );
 const quote = (t: Answered, i: number, max = 160): Evidence => {
   const text = t.answer.text.replace(/\s+/g, ' ').trim();
   return { kind: 'cita', text: text.length > max ? `${text.slice(0, max)}…` : text, turn: i };
@@ -447,7 +453,11 @@ export function verifyQuote(q: string, turnId: string, s: EngineSnapshot): numbe
   if (!/^T[1-9]\d*$/.test(turnId)) return null;
   const i = Number(turnId.slice(1)) - 1;
   const t = s.turns[i];
-  return t?.answer && fold(t.answer.text).includes(needle) ? i : null;
+  return t?.answer &&
+    (t.answer.transcriptReviewed || !transcriptQuality(t.answer.text).review) &&
+    fold(t.answer.text).includes(needle)
+    ? i
+    : null;
 }
 
 export type EvaluationResult = {
@@ -478,6 +488,13 @@ export async function evaluateSession(input: {
   const s = input.snapshot,
     scenario = SCENARIOS[s.scenario];
   const notes: string[] = [];
+  const unreliable = s.turns.filter(
+    (t) => t.answer && !t.answer.transcriptReviewed && transcriptQuality(t.answer.text).review,
+  );
+  if (unreliable.length)
+    notes.push(
+      `Se excluyeron ${unreliable.length} respuestas con bucles de transcripción pendientes de revisión. No se interpretan como evasión, falta de síntesis ni evidencia de desempeño.`,
+    );
   const criteria = (input.criteria ?? scenario.criteria).map((c) => ({
     ...c,
     weight: Number.isFinite(c.weight) && c.weight > 0 ? c.weight : 1,
@@ -486,37 +503,64 @@ export async function evaluateSession(input: {
   let evaluatorModel: string | null = null;
   const aiCriteria = criteria.filter((c) => c.methods.includes('ia'));
   if (input.llm && aiCriteria.length && answered(s).length) {
-    const prompt = evaluationPrompt({
-      scenario,
-      config: s.config,
-      criteria: aiCriteria,
-      exposition: s.exposition.map((e) => e.text).join(' '),
-      turns: s.turns.map((t, i) => ({
-        id: `T${i + 1}`,
-        question: t.question.text,
-        answer: t.answer?.text ?? '',
-      })),
-      chunks: input.chunks ?? [],
-    });
-    if (prompt.clippedTurns)
-      notes.push(
-        `El evaluador con IA recibió ${prompt.clippedTurns} respuestas recortadas a 1.500 caracteres; las reglas sí usaron el texto completo.`,
-      );
-    try {
-      const raw = await input.llm.complete(prompt.messages, {
-        json: true,
-        schema: EVALUATION_JSON_SCHEMA,
-        signal: input.signal,
-        timeoutMs: 120000,
-        temperature: 0.2,
+    const makePrompt = (batch: CriterionDef[]) =>
+      evaluationPrompt({
+        scenario,
+        config: s.config,
+        criteria: batch,
+        exposition: s.exposition.map((e) => e.text).join(' '),
+        turns: s.turns.map((t, i) => ({
+          id: `T${i + 1}`,
+          question: t.question.text,
+          answer: t.answer && !unreliable.includes(t) ? t.answer.text : '',
+        })),
+        chunks: input.chunks ?? [],
       });
-      ai = EvaluationSchema.parse(extractJson(raw));
-      evaluatorModel = input.llm.model;
-    } catch (e) {
+    const coverage = makePrompt(aiCriteria.slice(0, 3));
+    if (coverage.clippedTurns)
       notes.push(
-        `No se obtuvo la evaluación del modelo (${e instanceof Error ? e.message.slice(0, 120) : 'error'}); se usaron reglas y mediciones.`,
+        `El evaluador con IA recibió ${coverage.clippedTurns} turnos recortados por el presupuesto de contexto; las reglas usaron el texto completo de las respuestas fiables.`,
       );
+    if (coverage.omittedTurns)
+      notes.push(
+        `La IA recibió una muestra distribuida de 24 turnos; ${coverage.omittedTurns} quedaron fuera de su contexto. Las reglas conservaron todas las respuestas fiables.`,
+      );
+    const accepted: ReturnType<typeof EvaluationSchema.parse>['criterios'] = [];
+    for (let start = 0; start < aiCriteria.length; start += 3) {
+      input.signal?.throwIfAborted();
+      const batch = aiCriteria.slice(start, start + 3);
+      const prompt = makePrompt(batch);
+      let failure: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const raw = await input.llm.complete(prompt.messages, {
+            json: true,
+            schema: evaluationJsonSchema(batch.map((c) => c.id)),
+            signal: input.signal,
+            timeoutMs: 120000,
+            temperature: 0,
+            maxOutputTokens: 2048,
+          });
+          const value = EvaluationSchema.parse(extractJson(raw));
+          accepted.push(...value.criterios.filter((c) => batch.some((b) => b.id === c.id)));
+          evaluatorModel = input.llm.model;
+          failure = null;
+          if (attempt)
+            notes.push(
+              `Se recuperó el bloque ${Math.floor(start / 3) + 1} de evaluación tras una salida inválida.`,
+            );
+          break;
+        } catch (e) {
+          input.signal?.throwIfAborted();
+          failure = e;
+        }
+      }
+      if (failure)
+        notes.push(
+          `No se obtuvo el bloque ${Math.floor(start / 3) + 1} de evaluación (${failure instanceof Error ? failure.message.slice(0, 120) : 'error'}); esos criterios conservan reglas o «No evaluado».`,
+        );
     }
+    ai = EvaluationSchema.parse({ criterios: accepted });
   }
   let discarded = 0;
   const results: CriterionResult[] = criteria.map((c) => {

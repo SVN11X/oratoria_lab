@@ -32,6 +32,13 @@ export type PracticeRecord = {
   /** Importado del antiguo simulador de defensa. */
   legacy?: boolean;
   diagnostics?: DiagnosticReport;
+  /** Original y corrección; nunca se incluyen en el diagnóstico sin contenido. */
+  transcriptReviews?: {
+    questionId: string;
+    original: string;
+    accepted: string;
+    action: 'corrected' | 'confirmed' | 'retry';
+  }[];
 };
 const RecordShape = z
   .object({

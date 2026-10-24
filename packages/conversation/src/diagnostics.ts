@@ -1,6 +1,7 @@
 export const TIMING_LABELS = {
   captureMs: 'Captura de respuesta',
   transcriptionMs: 'Transcripción final',
+  reviewMs: 'Revisión de la transcripción',
   ragMs: 'Recuperación documental',
   contextMs: 'Preparación de contexto',
   generationMs: 'Generación (cliente)',
@@ -9,6 +10,11 @@ export const TIMING_LABELS = {
   promptMs: 'Procesamiento del prompt (Ollama)',
   firstTokenMs: 'Primer token (cliente)',
   synthesisMs: 'Síntesis de voz',
+  voiceQueueMs: 'Cola de Piper',
+  voiceLoadMs: 'Carga de voz Piper',
+  voicePhonemeMs: 'Fonemas de Piper',
+  voiceInferenceMs: 'Inferencia de Piper',
+  voiceAudioMs: 'Audio generado por Piper',
   firstAudioMs: 'Hasta el primer audio',
   responseMs: 'Hasta completar la intervención',
   tokensPerSecond: 'Tokens por segundo (Ollama)',
@@ -39,6 +45,10 @@ export class TurnDiagnostics {
   }
   get currentId() {
     return this.rows.at(-1)?.id ?? null;
+  }
+  /** Tras una revisión humana, la espera de respuesta se mide desde su confirmación. */
+  resumeResponse() {
+    this.started = this.clock();
   }
   add(key: TimingKey, value: number, accumulate = false) {
     const row = this.rows.at(-1);

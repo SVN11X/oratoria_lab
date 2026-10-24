@@ -10,3 +10,4 @@ export * from './evaluation';
 export * from './coach';
 export * from './speech';
 export * from './diagnostics';
+export * from './transcript-quality';

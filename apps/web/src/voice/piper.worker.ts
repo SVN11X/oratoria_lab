@@ -22,6 +22,7 @@ type Request =
       noiseScale?: number;
       noiseW?: number;
     };
+type Incoming = Request | { type: 'cancel'; target: number };
 type Config = {
   audio: { sample_rate: number };
   espeak: { voice: string };
@@ -52,7 +53,10 @@ async function getPhonemizer(base: string): Promise<Phonemizer> {
       printErr: () => undefined,
       locateFile: (p: string) => new URL(`${base}piper/${p}`, self.location.origin).href,
     })) as Phonemizer;
-  })();
+  })().catch((error: unknown) => {
+    phonemizer = null;
+    throw error;
+  });
   return phonemizer;
 }
 async function getVoice(voice: string, base: string) {
@@ -88,11 +92,11 @@ async function phonemeIds(text: string, espeakVoice: string, base: string): Prom
   return parsed.phoneme_ids;
 }
 
-self.onmessage = async (event: MessageEvent<Request>) => {
-  const req = event.data;
+async function run(req: Request, queuedAt: number) {
   const started = performance.now();
   try {
     const { session, config } = await getVoice(req.voice, req.base);
+    const loadedAt = performance.now();
     if (req.type === 'load') {
       await getPhonemizer(req.base);
       self.postMessage({
@@ -104,6 +108,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
       return;
     }
     const ids = await phonemeIds(req.text, config.espeak.voice, req.base);
+    const phonemesAt = performance.now();
     const feeds: Record<string, ort.Tensor> = {
       input: new ort.Tensor('int64', BigInt64Array.from(ids.map((x) => BigInt(x))), [1, ids.length]),
       input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
@@ -119,16 +124,32 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     };
     if (session.inputNames.includes('sid'))
       feeds.sid = new ort.Tensor('int64', BigInt64Array.from([BigInt(Math.max(0, req.speaker))]), [1]);
-    const out = await session.run(feeds);
-    const audio = (out.output ?? out[session.outputNames[0]!])!.data as Float32Array;
-    const pcm = Float32Array.from(audio);
+    const out = await session.run(feeds).finally(() => {
+      for (const tensor of Object.values(feeds)) tensor.dispose();
+    });
+    const inferredAt = performance.now();
+    let pcm: Float32Array;
+    try {
+      const audio = (out.output ?? out[session.outputNames[0]!])!.data as Float32Array;
+      pcm = Float32Array.from(audio);
+    } finally {
+      for (const tensor of Object.values(out)) tensor.dispose();
+    }
+    if (cancelled.has(req.id)) return;
     self.postMessage(
       {
         id: req.id,
         ok: true,
         pcm,
         sampleRate: config.audio.sample_rate,
-        synthesisMs: performance.now() - started,
+        synthesisMs: performance.now() - queuedAt,
+        timings: {
+          voiceQueueMs: started - queuedAt,
+          voiceLoadMs: loadedAt - started,
+          voicePhonemeMs: phonemesAt - loadedAt,
+          voiceInferenceMs: inferredAt - phonemesAt,
+          voiceAudioMs: (pcm.length / config.audio.sample_rate) * 1000,
+        },
       },
       [pcm.buffer],
     );
@@ -139,4 +160,26 @@ self.onmessage = async (event: MessageEvent<Request>) => {
       error: error instanceof Error ? error.message : 'Falló la síntesis de voz.',
     });
   }
+}
+// Emscripten comparte su salida de fonemas y las sesiones ONNX: solo un trabajo a la vez.
+let queue = Promise.resolve();
+const scheduled = new Set<number>();
+const cancelled = new Set<number>();
+self.onmessage = (event: MessageEvent<Incoming>) => {
+  const req = event.data;
+  if (req.type === 'cancel') {
+    if (scheduled.has(req.target)) cancelled.add(req.target);
+    return;
+  }
+  const queuedAt = performance.now();
+  scheduled.add(req.id);
+  const work = async () => {
+    try {
+      if (!cancelled.has(req.id)) await run(req, queuedAt);
+    } finally {
+      scheduled.delete(req.id);
+      cancelled.delete(req.id);
+    }
+  };
+  queue = queue.then(work, work);
 };

@@ -47,6 +47,8 @@ import type {
   LlmMetrics,
 } from './types';
 import type { TimingKey } from './diagnostics';
+import { transcriptQuality, TranscriptReviewRequired } from './transcript-quality';
+import { unsupportedPremise } from './grounding';
 
 export type EngineDeps = {
   llm?: LlmPort | null;
@@ -70,6 +72,7 @@ export type AnswerInput = {
   durationSec: number;
   latencySec: number | null;
   interrupted?: boolean;
+  transcriptReviewed?: boolean;
 };
 
 const WEAK = new Set(['parcial', 'sin_sustento', 'evade', 'contradice_documento', 'sin_respuesta']);
@@ -256,6 +259,7 @@ export class ConversationEngine {
     ids: string[],
     chunks: RetrievedChunk[],
     messages?: Parameters<LlmPort['complete']>[0],
+    currentAnswer = '',
   ) {
     if (ids.some((id) => !/^S[1-9]\d*$/.test(id) || !chunks[Number(id.slice(1)) - 1])) return false;
     if (messages) {
@@ -269,6 +273,33 @@ export class ConversationEngine {
       );
       if (ids.some((id) => !visible.has(id))) return false;
     }
+    let evidence = ids.map((id) => chunks[Number(id.slice(1)) - 1]?.text ?? '').join('\n');
+    if (messages) {
+      const visibleText: string[] = [];
+      for (const line of messages.flatMap((m) => m.content.split('\n'))) {
+        const id = line.match(/^\[(S[1-9]\d*)\]/)?.[1];
+        if (!id || !ids.includes(id)) continue;
+        try {
+          const source = JSON.parse(line.slice(line.indexOf('{'))) as { texto?: string };
+          if (typeof source.texto === 'string') visibleText.push(source.texto);
+        } catch {
+          /* Un bloque cortado no justifica una premisa. */
+        }
+      }
+      evidence = visibleText.join('\n');
+    }
+    const userEvidence = [
+      this.config.topic,
+      ...Object.values(this.config.context),
+      this.expositionText(),
+      currentAnswer,
+      ...this.turns.flatMap((t) =>
+        t.answer && (t.answer.transcriptReviewed || !transcriptQuality(t.answer.text).review)
+          ? [t.answer.text]
+          : [],
+      ),
+    ].join('\n');
+    if (unsupportedPremise(text, `${evidence}\n${userEvidence}`)) return false;
     if (
       !ids.length &&
       /(?:su|el) (?:documento|tesis) (?:afirma|indica|muestra|dice|concluye|demuestra)|en su (?:tesis|documento) (?:afirma|indica|dice|sostiene)/i.test(
@@ -468,7 +499,9 @@ export class ConversationEngine {
           reason = r.motivo || `Área «${area.name}».`;
           generator = 'ia';
         } else if (r)
-          this.note('Se descartó una pregunta del modelo por repetir otra o no cumplir las reglas de trato.');
+          this.note(
+            'Se descartó una pregunta del modelo por repetición, evidencia insuficiente o reglas de trato.',
+          );
       }
     }
     if (!text) {
@@ -534,6 +567,8 @@ export class ConversationEngine {
   async answer(input: AnswerInput): Promise<Move[]> {
     const c = this.current;
     if (!c || c.answer) throw new Error('No hay una pregunta esperando respuesta.');
+    if (!input.transcriptReviewed && transcriptQuality(input.text).review)
+      throw new TranscriptReviewRequired();
     const q = c.question,
       p = this.participant(q.speakerId);
     const extra =
@@ -597,7 +632,10 @@ export class ConversationEngine {
               ? [`S${i + 1}`]
               : [],
           );
-      if (d && this.grounded(`${d.reaccion} ${d.repregunta ?? ''}`, decisionSources, context)) {
+      if (
+        d &&
+        this.grounded(`${d.reaccion} ${d.repregunta ?? ''}`, decisionSources, context, undefined, input.text)
+      ) {
         decided = true;
         // Una contradicción numérica detectada por reglas tiene evidencia verificable: prevalece.
         const type = analysis.contradictions.length
@@ -673,7 +711,7 @@ export class ConversationEngine {
         r &&
         this.acceptable(r.pregunta) &&
         (reformulating || !this.isRepeat(r.pregunta)) &&
-        this.grounded(r.pregunta, r.fuentes, context, messages)
+        this.grounded(r.pregunta, r.fuentes, context, messages, input.text)
       ) {
         follow = r.pregunta;
         followSources = this.citationsFrom(r.fuentes, context);
@@ -689,6 +727,7 @@ export class ConversationEngine {
       interrupted: !!input.interrupted || this.interruptedCurrent,
       analysis,
       feedback: null,
+      ...(input.transcriptReviewed ? { transcriptReviewed: true } : {}),
     };
     this.perf.push(answerScore(analysis.type));
     if (reaction) this.recentReactions.set(p.id, [...used, reaction].slice(-3));

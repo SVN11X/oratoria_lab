@@ -45,7 +45,7 @@ export class OllamaPort implements LlmPort {
       signal: o.signal,
       timeoutMs: o.timeoutMs,
       numCtx: fast ? 4096 : 8192,
-      numPredict: fast ? 256 : this.role === 'evaluacion' ? 4096 : 512,
+      numPredict: o.maxOutputTokens ?? (fast ? 256 : this.role === 'evaluacion' ? 4096 : 512),
     };
     const r = o.onDelta ? await this.client.chatStream(input, o.onDelta) : await this.client.chat(input);
     const stats = r.stats;
@@ -89,6 +89,7 @@ export class OpenAiPort implements LlmPort {
           model: this.model,
           messages,
           temperature: o.temperature ?? 0.6,
+          ...(o.maxOutputTokens ? { max_tokens: o.maxOutputTokens } : {}),
           ...(json ? { response_format: { type: 'json_object' } } : {}),
         }),
       });

@@ -20,8 +20,11 @@ export type SpeakEvents = {
   onEnd?: () => void;
   /** Inicio real de reproducción, no el instante en que se solicita sintetizar. */
   onStart?: () => void;
-  onSynthesis?: (ms: number) => void;
+  onSynthesis?: (ms: number, timings?: VoiceTimings) => void;
 };
+export type VoiceTimings = Partial<
+  Record<'voiceQueueMs' | 'voiceLoadMs' | 'voicePhonemeMs' | 'voiceInferenceMs' | 'voiceAudioMs', number>
+>;
 export type SpeakHandle = { done: Promise<void>; cancel: () => void };
 export interface Tts {
   readonly id: string;
@@ -38,6 +41,29 @@ export function phrases(text: string): { text: string; pause: number }[] {
     .flatMap((p) => (p.length > 160 ? p.split(/(?<=,)\s+/) : [p]))
     .filter(Boolean);
   return parts.map((p) => ({ text: p, pause: /[?]$/.test(p) ? 1.25 : /[.!:;]$/.test(p) ? 1 : 0.45 }));
+}
+/** Piper puede empezar con una cláusula corta sin esperar a sintetizar toda la pregunta. */
+export function piperPhrases(text: string): { text: string; pause: number }[] {
+  const result: { text: string; pause: number }[] = [];
+  for (const phrase of phrases(text)) {
+    let rest = phrase.text;
+    while (rest) {
+      const max = result.length ? 160 : 96;
+      if (rest.length <= max) {
+        result.push({ text: rest, pause: phrase.pause });
+        break;
+      }
+      const punctuation = [...rest.slice(0, max + 1).matchAll(/[,;:!?]\s+/g)].at(-1);
+      let split =
+        punctuation && punctuation.index >= max * 0.45 ? punctuation.index + 1 : rest.lastIndexOf(' ', max);
+      if (split < 1) split = rest.indexOf(' ', max);
+      if (split < 1) split = rest.length; // Una palabra larga no se mutila.
+      const part = rest.slice(0, split).trim();
+      result.push({ text: part, pause: /[,;:!?]$/.test(part) ? 0.45 : 0 });
+      rest = rest.slice(split).trim();
+    }
+  }
+  return result;
 }
 const sleep = (ms: number, cancelled: () => boolean) =>
   new Promise<void>((r) => {
@@ -269,6 +295,7 @@ type PiperResult = {
   error?: string;
   speakers?: number;
   synthesisMs?: number;
+  timings?: VoiceTimings;
 };
 function piper() {
   if (!piperWorker) {
@@ -289,7 +316,10 @@ function piper() {
 function callPiper(msg: Record<string, unknown>, signal?: AbortSignal) {
   const id = ++seq;
   return new Promise<PiperResult>((resolve) => {
-    const abort = () => finish({ ok: false, error: 'Síntesis cancelada.' });
+    const abort = () => {
+      piperWorker?.postMessage({ type: 'cancel', target: id });
+      finish({ ok: false, error: 'Síntesis cancelada.' });
+    };
     const finish = (value: PiperResult) => {
       clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
@@ -341,7 +371,7 @@ export class PiperTts implements Tts {
     const playbackRate = Math.max(0.85, Math.min(1.18, v.pitch));
     const lengthScale = playbackRate / Math.max(0.6, Math.min(1.5, v.rate));
     const done = (async () => {
-      const list = phrases(text);
+      const list = piperPhrases(text);
       if (!list.length) return;
       let next = callPiper(
         { type: 'speak', voice: id, text: list[0]!.text, speaker, lengthScale },
@@ -351,7 +381,13 @@ export class PiperTts implements Tts {
         const r = await next;
         if (cancelled) return; // Un PCM de una intervención antigua nunca debe reproducirse.
         if (!r.ok || !r.pcm) throw new Error(r.error ?? 'No se pudo sintetizar la voz.');
-        if (r.synthesisMs !== undefined) ev.onSynthesis?.(r.synthesisMs);
+        if (r.synthesisMs !== undefined)
+          ev.onSynthesis?.(r.synthesisMs, {
+            ...r.timings,
+            ...(r.timings?.voiceAudioMs !== undefined
+              ? { voiceAudioMs: r.timings.voiceAudioMs / playbackRate }
+              : {}),
+          });
         if (i + 1 < list.length)
           next = callPiper(
             {

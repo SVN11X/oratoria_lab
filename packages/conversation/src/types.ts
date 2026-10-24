@@ -228,6 +228,8 @@ export type TurnRecord = {
     interrupted: boolean;
     analysis: AnswerAnalysis;
     feedback: string | null;
+    /** La persona revisó explícitamente el texto antes de enviarlo. */
+    transcriptReviewed?: boolean;
   } | null;
 };
 
@@ -254,6 +256,8 @@ export interface LlmPort {
       signal?: AbortSignal;
       timeoutMs?: number;
       temperature?: number;
+      /** Límite solicitado de salida; cada adaptador aplica también sus límites de ejecución. */
+      maxOutputTokens?: number;
       /** Fragmentos de texto. Un consumidor debe validar la intervención antes de pronunciarla. */
       onDelta?: (delta: string) => void;
       onMetrics?: (metrics: LlmMetrics) => void;

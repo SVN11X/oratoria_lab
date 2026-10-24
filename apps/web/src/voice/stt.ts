@@ -148,7 +148,7 @@ export class BrowserStt implements Stt {
 }
 
 /* --------------------- Transcripción local por fragmentos (Whisper) --------------------- */
-type Job = { pcm: Float32Array; t: number };
+type Job = { pcm: Float32Array; t: number; rate: number; epoch: number };
 let whisper: Worker | null = null;
 let whisperSeq = 0;
 type WhisperReply = { ok: boolean; text?: string; result?: unknown; error?: string };
@@ -203,6 +203,7 @@ abstract class ChunkedStt implements Stt {
   private listening = false;
   private queue: Promise<void> = Promise.resolve();
   private busy = 0;
+  private epoch = 0;
   constructor(protected h: SttHandlers) {}
   protected abstract transcribe(pcm16k: Float32Array): Promise<string>;
   start() {}
@@ -219,8 +220,8 @@ abstract class ChunkedStt implements Stt {
     this.samples += frame.length;
     this.quiet = rms(frame) < 0.006 ? this.quiet + frame.length : 0;
     const sec = this.samples / this.rate;
-    // Corta en una pausa tras 12 s, o a los 28 s como máximo.
-    if ((sec >= 12 && this.quiet / this.rate >= 0.5) || sec >= 28) this.cut();
+    // Transcribe pausas desde 4 s y limita el audio pendiente a 16 s por fragmento.
+    if ((sec >= 4 && this.quiet / this.rate >= 0.65) || sec >= 16) this.cut();
   }
   private cut() {
     if (!this.samples) return;
@@ -230,7 +231,7 @@ abstract class ChunkedStt implements Stt {
       all.set(f, o);
       o += f.length;
     }
-    const job: Job = { pcm: all, t: this.startedAt };
+    const job: Job = { pcm: all, t: this.startedAt, rate: this.rate, epoch: this.epoch };
     this.frames = [];
     this.samples = 0;
     this.quiet = 0;
@@ -239,9 +240,10 @@ abstract class ChunkedStt implements Stt {
     this.h.onBusy?.(true);
     this.queue = this.queue.then(async () => {
       try {
-        const pcm = downmixAndResample([job.pcm], this.rate, 16000);
+        if (job.epoch !== this.epoch) return;
+        const pcm = downmixAndResample([job.pcm], job.rate, 16000);
         const text = (await this.transcribe(pcm)).replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim();
-        if (text) this.h.onFinal(text, job.t);
+        if (text && job.epoch === this.epoch) this.h.onFinal(text, job.t);
       } catch (error) {
         this.h.onError?.(error instanceof Error ? error.message : 'Falló la transcripción.');
       } finally {
@@ -254,6 +256,7 @@ abstract class ChunkedStt implements Stt {
     await this.queue;
   }
   stop() {
+    this.epoch++;
     this.listening = false;
     this.frames = [];
     this.samples = 0;

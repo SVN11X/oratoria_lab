@@ -23,6 +23,7 @@ import {
   coachPlan,
   evaluateSession,
   TurnDiagnostics,
+  transcriptQuality,
   type Move,
   type RetrievedChunk,
   type ScenarioId,
@@ -87,6 +88,15 @@ export function Room({
   const telemetry = useRef(new TurnDiagnostics());
   const [diagnostics, setDiagnostics] = useState(() => telemetry.current.export());
   const [draft, setDraft] = useState<{ speakerId: string; text: string } | null>(null);
+  const [review, setReview] = useState('');
+  const [confirmTranscript, setConfirmTranscript] = useState(false);
+  const reviewRef = useRef<{
+    original: string;
+    endedAt: number;
+    startedAt: number | null;
+    openedAt: number;
+  } | null>(null);
+  const transcriptReviews = useRef<NonNullable<PracticeRecord['transcriptReviews']>>([]);
   const [ragStatus, setRagStatus] = useState('Sin documentos seleccionados');
   const [stage, setStage] = useState<Stage>('preparando'),
     [paused, setPaused] = useState(false),
@@ -173,7 +183,12 @@ export function Room({
     const handle = tts.current.speak(m.text, voiceSpec(p, indexOf(p.id)), {
       onMouth: (mouth) => avatars.current.get(m.speakerId)?.setMouth(mouth),
       onStart: () => telemetry.current.mark('firstAudioMs', true),
-      onSynthesis: (ms) => telemetry.current.add('synthesisMs', ms, true),
+      onSynthesis: (ms, timings) => {
+        telemetry.current.add('synthesisMs', ms, true);
+        for (const [key, value] of Object.entries(timings ?? {}))
+          if (value !== undefined)
+            telemetry.current.add(key as keyof NonNullable<typeof timings>, value, true);
+      },
     });
     speech.current = handle;
     let barge: ReturnType<typeof setInterval> | undefined;
@@ -252,27 +267,67 @@ export function Room({
     setModes(a.move.speakerId, 'thinking');
     setStatus(`${e.participant(a.move.speakerId).name} considera tu respuesta…`);
     stt.current?.setListening(false, s.now());
-    telemetry.current.begin(enginesRef.current.llm || null, enginesRef.current.llm ? ai.provider : 'reglas');
-    telemetry.current.add('captureMs', Math.max(0, s.now() - a.askedAt) * 1000);
+    // El tiempo de respuesta oral termina al pulsar el botón, antes de esperar a Whisper.
+    const pendingReview = reviewRef.current;
+    const endedAt = pendingReview?.endedAt ?? s.now();
+    const startedAt = pendingReview ? pendingReview.startedAt : s.firstVoiceAfter(a.askedAt);
+    s.setPhase('pregunta');
+    if (!pendingReview) {
+      telemetry.current.begin(
+        enginesRef.current.llm || null,
+        enginesRef.current.llm ? ai.provider : 'reglas',
+      );
+      telemetry.current.add('captureMs', Math.max(0, endedAt - a.askedAt) * 1000);
+    }
     try {
-      if (stt.current) {
+      if (stt.current && !pendingReview) {
         const transcriptionAt = performance.now();
         setTranscribing(!stt.current.live);
         await stt.current.flush();
         telemetry.current.add('transcriptionMs', performance.now() - transcriptionAt);
       }
       setTranscribing(false);
-      const text = [
-        ...chunks.current
-          .slice(a.chunkStart)
-          .filter((c) => c.phase === 'respuesta')
-          .map((c) => c.text),
-        typedRef.current.trim(),
-      ]
-        .filter(Boolean)
-        .join(' ');
-      const startedAt = s.firstVoiceAfter(a.askedAt);
-      const endedAt = s.now();
+      const text = pendingReview
+        ? typedRef.current.trim()
+        : [
+            ...chunks.current
+              .slice(a.chunkStart)
+              .filter((c) => c.phase === 'respuesta')
+              .map((c) => c.text),
+            typedRef.current.trim(),
+          ]
+            .filter(Boolean)
+            .join(' ');
+      const quality = transcriptQuality(text);
+      if (quality.review && !confirmTranscript) {
+        if (!pendingReview)
+          reviewRef.current = { original: text, endedAt, startedAt, openedAt: performance.now() };
+        setReview(quality.reason);
+        setTyped(text);
+        typedRef.current = text;
+        s.pause();
+        asking.current = a;
+        busy.current = false;
+        go('respuesta');
+        return;
+      }
+      if (pendingReview) {
+        transcriptReviews.current.push({
+          questionId: a.move.id,
+          original: pendingReview.original,
+          accepted: text,
+          action: text === pendingReview.original ? 'confirmed' : 'corrected',
+        });
+        chunks.current = [
+          ...chunks.current.slice(0, a.chunkStart),
+          ...(text ? [{ text, t: startedAt ?? a.askedAt, phase: 'respuesta' as const }] : []),
+        ];
+        telemetry.current.add('reviewMs', performance.now() - pendingReview.openedAt);
+        telemetry.current.resumeResponse();
+        reviewRef.current = null;
+        setReview('');
+        setConfirmTranscript(false);
+      }
       answers.current.push({
         member: Math.min(2, Math.max(0, indexOf(a.move.speakerId))) as MemberId,
         kind:
@@ -293,6 +348,7 @@ export function Room({
         text,
         durationSec: Math.max(0, endedAt - a.askedAt),
         latencySec: startedAt === null ? null : Math.max(0, startedAt - a.askedAt),
+        transcriptReviewed: !!pendingReview,
       });
       for (const n of e.notes) warn(n);
       busy.current = false;
@@ -308,6 +364,28 @@ export function Room({
         }
       }
     }
+  }
+  function retryAnswer() {
+    const pending = reviewRef.current;
+    const a = asking.current;
+    const s = sensors.current;
+    if (!pending || !a || !s) return;
+    transcriptReviews.current.push({
+      questionId: a.move.id,
+      original: pending.original,
+      accepted: '',
+      action: 'retry',
+    });
+    telemetry.current.add('reviewMs', performance.now() - pending.openedAt);
+    chunks.current = chunks.current.slice(0, a.chunkStart);
+    asking.current = { ...a, askedAt: s.now(), chunkStart: chunks.current.length };
+    reviewRef.current = null;
+    setReview('');
+    setConfirmTranscript(false);
+    setTyped('');
+    typedRef.current = '';
+    setLastFinal('');
+    listen('respuesta');
   }
   async function interrupt() {
     const e = engine.current,
@@ -435,6 +513,7 @@ export function Room({
       media: media ? { type: media.type, bytes: media.size } : null,
       goal: setup.goal,
       diagnostics: telemetry.current.export(),
+      ...(transcriptReviews.current.length ? { transcriptReviews: transcriptReviews.current } : {}),
     };
     onFinish(record, media);
   }
@@ -667,7 +746,7 @@ export function Room({
           void interrupt();
         }
       }
-      if (st === 'respuesta' && asking.current && l) {
+      if (st === 'respuesta' && asking.current && l && !reviewRef.current) {
         const elapsed = now - asking.current.askedAt;
         const liveText = [
           ...chunks.current.slice(asking.current.chunkStart).map((c) => c.text),
@@ -882,13 +961,15 @@ export function Room({
               <>
                 <button className="button primary" onClick={() => void finishAnswer()} disabled={paused}>
                   <ArrowRight size={16} />{' '}
-                  {asking.current?.move.kind === 'interrupcion'
-                    ? 'Respondí, sigo exponiendo'
-                    : 'Terminé mi respuesta'}
+                  {review
+                    ? 'Enviar transcripción revisada'
+                    : asking.current?.move.kind === 'interrupcion'
+                      ? 'Respondí, sigo exponiendo'
+                      : 'Terminé mi respuesta'}
                 </button>
                 <button
                   className="button secondary"
-                  disabled={paused}
+                  disabled={paused || !!review}
                   onClick={() => {
                     const a = asking.current;
                     if (a)
@@ -901,7 +982,7 @@ export function Room({
                 </button>
               </>
             )}
-            {userTurn && (
+            {userTurn && !review && (
               <button className="button secondary" onClick={togglePause}>
                 {paused ? <Play size={16} /> : <Pause size={16} />} {paused ? 'Continuar' : 'Pausar'}
               </button>
@@ -911,11 +992,13 @@ export function Room({
                 <Hand size={16} /> Saltar intervención
               </button>
             )}
-            {(stage === 'respuesta' || stage === 'exposicion') && engine.current?.status === 'questions' && (
-              <button className="button quiet" onClick={() => void finish()}>
-                Terminar la práctica ahora
-              </button>
-            )}
+            {(stage === 'respuesta' || stage === 'exposicion') &&
+              !review &&
+              engine.current?.status === 'questions' && (
+                <button className="button quiet" onClick={() => void finish()}>
+                  Terminar la práctica ahora
+                </button>
+              )}
             {stage !== 'cierre' && (
               <button className="button quiet" onClick={() => setConfirmCancel(true)}>
                 Salir sin guardar
@@ -934,7 +1017,11 @@ export function Room({
         </section>
         {(stage === 'respuesta' || (stage === 'exposicion' && !stt.current)) && (
           <label className="field panel">
-            {stt.current ? 'Agregar por escrito (opcional)' : 'Escribe lo esencial de lo que dices'}
+            {review
+              ? 'Revisa la transcripción antes de enviarla'
+              : stt.current
+                ? 'Agregar por escrito (opcional)'
+                : 'Escribe lo esencial de lo que dices'}
             <textarea
               rows={3}
               value={typed}
@@ -949,6 +1036,26 @@ export function Room({
               }
             />
           </label>
+        )}
+        {review && (
+          <section className="panel" aria-label="Revisión de transcripción">
+            <Alert tone="warn">{review} El micrófono está en pausa durante la revisión.</Alert>
+            <label className="row-wrap">
+              <input
+                type="checkbox"
+                checked={confirmTranscript}
+                onChange={(e) => setConfirmTranscript(e.target.checked)}
+              />
+              Confirmo que el texto refleja lo que dije, incluidas las repeticiones.
+            </label>
+            <button className="button secondary" onClick={retryAnswer}>
+              Volver a responder
+            </button>
+            <p className="caption">
+              Puedes corregir el texto y enviarlo, confirmar una repetición intencional o volver a hablar. Se
+              conserva el original junto con tu revisión.
+            </p>
+          </section>
         )}
         {setup.indicators ? (
           <section className="panel" aria-label="Indicadores en vivo">

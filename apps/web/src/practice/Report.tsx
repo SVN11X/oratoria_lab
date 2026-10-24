@@ -9,13 +9,14 @@ import {
   STAGE_TEXT,
   compareCriterion,
   previousComparable,
+  transcriptQuality,
   type CriterionResult,
   type Dimension,
   type Exercise,
 } from '@oratoria/conversation';
 import { formatDuration } from '@oratoria/core';
 import { downloadBlob, safeFilename } from '@oratoria/export';
-import { PageHead, Metric, Chart, Confirm } from '../components';
+import { PageHead, Metric, Chart, Confirm, Alert } from '../components';
 import { recordMedia, historyPoints, useRecords, type PracticeRecord } from './records';
 import { Diagnostics } from './Diagnostics';
 
@@ -106,6 +107,9 @@ export function Report({
   );
   const evaluated = criteria.filter((c) => c.level !== null);
   const turns = record.snapshot?.turns ?? [];
+  const pendingTranscripts = turns.filter(
+    (t) => t.answer && !t.answer.transcriptReviewed && transcriptQuality(t.answer.text).review,
+  ).length;
   const names = new Map(record.snapshot?.config.participants.map((p) => [p.id, p]) ?? []);
   const seek = (t: number) => {
     if (player.current) {
@@ -177,6 +181,36 @@ export function Report({
           </button>
         }
       />
+      {pendingTranscripts > 0 && (
+        <Alert tone="warn">
+          Hay {pendingTranscripts} respuestas con bucles de transcripción pendientes de revisión. La
+          puntuación guardada puede estar afectada por esos errores; revisa la grabación antes de interpretar
+          los criterios de contenido.
+        </Alert>
+      )}
+      {!!record.transcriptReviews?.length && (
+        <details className="panel">
+          <summary>Transcripciones revisadas ({record.transcriptReviews.length})</summary>
+          {record.transcriptReviews.map((item, i) => (
+            <div key={`${item.questionId}:${i}`}>
+              <p>
+                <strong>
+                  {item.action === 'retry'
+                    ? 'Se volvió a responder'
+                    : item.action === 'confirmed'
+                      ? 'Texto confirmado'
+                      : 'Texto corregido'}
+                </strong>
+              </p>
+              <details>
+                <summary>Ver original reconocido</summary>
+                <p>{item.original}</p>
+              </details>
+              {item.accepted && <p>{item.accepted}</p>}
+            </div>
+          ))}
+        </details>
+      )}
       <div className="report-summary">
         <section className="panel">
           <span className="eyebrow">Resumen</span>
