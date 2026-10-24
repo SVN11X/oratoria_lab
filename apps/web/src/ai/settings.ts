@@ -13,6 +13,7 @@ export type Bench = {
   jsonOk: boolean;
   spanishOk: boolean;
   note: string;
+  firstTokenSec?: number | null;
 };
 export type AiSettings = {
   /** Usar un modelo de lenguaje; si es false, todo funciona con reglas. */
@@ -34,6 +35,9 @@ export type AiSettings = {
   bench: Record<string, Bench>;
   lastUsed: Record<string, string>;
   hardware: Hardware | null;
+  /** El modo académico amplía el presupuesto, sin cambiar modelos ni documentos. */
+  conversationMode: 'rapida' | 'academica';
+  reasoning: boolean;
 };
 export const DEFAULT_AI: AiSettings = {
   useLlm: false,
@@ -52,6 +56,8 @@ export const DEFAULT_AI: AiSettings = {
   bench: {},
   lastUsed: {},
   hardware: null,
+  conversationMode: 'rapida',
+  reasoning: false,
 };
 
 /** Migra la configuración del antiguo simulador de defensa, si existe. */

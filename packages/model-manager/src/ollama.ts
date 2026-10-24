@@ -1,3 +1,6 @@
+import { inferenceQueue } from './inference';
+import { readNdjson } from './ndjson';
+
 /**
  * Cliente de la API HTTP oficial de Ollama (https://github.com/ollama/ollama/blob/main/docs/api.md).
  * Solo usa endpoints documentados: no toca archivos internos de Ollama.
@@ -40,6 +43,22 @@ export type ChatStats = {
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
+  /** Medidas del cliente, en milisegundos; no son tiempos de Ollama. */
+  firstTokenMs?: number;
+  clientMs?: number;
+  queueMs?: number;
+};
+export type ChatInput = {
+  model: string;
+  messages: { role: string; content: string }[];
+  format?: 'json' | Record<string, unknown>;
+  temperature?: number;
+  think?: boolean;
+  keepAlive?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  numCtx?: number;
+  numPredict?: number;
 };
 
 export class OllamaError extends Error {
@@ -111,8 +130,13 @@ export class OllamaClient {
   async running(): Promise<OllamaRunning[]> {
     return (await this.request<{ models?: OllamaRunning[] }>('/api/ps')).models ?? [];
   }
-  async show(model: string): Promise<OllamaShow> {
-    return this.request<OllamaShow>('/api/show', { method: 'POST', body: JSON.stringify({ model }) });
+  async show(model: string, signal?: AbortSignal): Promise<OllamaShow> {
+    return this.request<OllamaShow>('/api/show', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+      signal,
+      timeoutMs: 4000,
+    });
   }
   /** Descarga con progreso. Cancelar detiene la descarga; Ollama conserva lo descargado para reanudar. */
   async pull(model: string, onProgress: (p: PullProgress) => void, signal?: AbortSignal): Promise<void> {
@@ -180,35 +204,34 @@ export class OllamaClient {
       timeoutMs: 20000,
     });
   }
-  async chat(input: {
-    model: string;
-    messages: { role: string; content: string }[];
-    format?: 'json' | Record<string, unknown>;
-    temperature?: number;
-    think?: boolean;
-    keepAlive?: string;
-    signal?: AbortSignal;
-    timeoutMs?: number;
-    numCtx?: number;
-  }): Promise<{ content: string; stats: ChatStats }> {
+  private chatBody(input: ChatInput, stream: boolean) {
+    return JSON.stringify({
+      model: input.model,
+      messages: input.messages,
+      stream,
+      ...(input.format ? { format: input.format } : {}),
+      ...(input.think !== undefined ? { think: input.think } : {}),
+      keep_alive: input.keepAlive ?? '10m',
+      options: {
+        temperature: input.temperature ?? 0.6,
+        ...(input.numCtx ? { num_ctx: input.numCtx } : {}),
+        ...(input.numPredict ? { num_predict: input.numPredict } : {}),
+      },
+    });
+  }
+  async chat(input: ChatInput): Promise<{ content: string; stats: ChatStats }> {
+    const timeout = AbortSignal.timeout(input.timeoutMs ?? 60000);
+    const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
+    return inferenceQueue(this.baseUrl).run(() => this.chatComplete({ ...input, signal }), signal);
+  }
+  private async chatComplete(input: ChatInput): Promise<{ content: string; stats: ChatStats }> {
     const r = await this.request<{ message?: { content?: string; thinking?: string } } & ChatStats>(
       '/api/chat',
       {
         method: 'POST',
         signal: input.signal,
         timeoutMs: input.timeoutMs ?? 60000,
-        body: JSON.stringify({
-          model: input.model,
-          messages: input.messages,
-          stream: false,
-          ...(input.format ? { format: input.format } : {}),
-          ...(input.think !== undefined ? { think: input.think } : {}),
-          keep_alive: input.keepAlive ?? '10m',
-          options: {
-            temperature: input.temperature ?? 0.6,
-            ...(input.numCtx ? { num_ctx: input.numCtx } : {}),
-          },
-        }),
+        body: this.chatBody(input, false),
       },
     );
     const content = r.message?.content ?? '';
@@ -233,16 +256,119 @@ export class OllamaClient {
       },
     };
   }
-  async embed(model: string, input: string[], signal?: AbortSignal): Promise<number[][]> {
+  /** Flujo real de /api/chat; solo message.content llega al consumidor, nunca thinking. */
+  async chatStream(
+    input: ChatInput,
+    onDelta: (delta: string) => void,
+  ): Promise<{ content: string; stats: ChatStats }> {
+    const queuedAt = performance.now();
+    const timeout = AbortSignal.timeout(input.timeoutMs ?? 60000);
+    const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
+    return inferenceQueue(this.baseUrl)
+      .run(async () => {
+        const started = performance.now();
+        let content = '',
+          done = false;
+        const stats: ChatStats = { queueMs: started - queuedAt };
+        try {
+          const response = await this.fetcher(this.url('/api/chat'), {
+            method: 'POST',
+            body: this.chatBody(input, true),
+            signal,
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+          });
+          if (!response.ok || !response.body)
+            throw new OllamaError(`Ollama rechazó la conversación (${response.status}).`, response.status);
+          await readNdjson(
+            response.body,
+            (value) => {
+              if (!value || typeof value !== 'object')
+                throw new OllamaError('Ollama envió un registro no válido.');
+              const record = value as {
+                error?: string;
+                done?: boolean;
+                message?: { content?: string };
+              } & ChatStats;
+              if (record.error)
+                throw new OllamaError(
+                  'Ollama interrumpió la generación. Revisa el modelo y vuelve a intentar.',
+                );
+              if (done) throw new OllamaError('Ollama envió contenido después del final de la respuesta.');
+              const delta = record.message?.content;
+              if (typeof delta === 'string' && delta) {
+                stats.firstTokenMs ??= performance.now() - started;
+                content += delta;
+                if (content.length > 1048576)
+                  throw new OllamaError('La respuesta supera el límite permitido.');
+                onDelta(delta);
+              }
+              if (record.done === true) {
+                done = true;
+                for (const key of [
+                  'total_duration',
+                  'load_duration',
+                  'prompt_eval_count',
+                  'prompt_eval_duration',
+                  'eval_count',
+                  'eval_duration',
+                ] as const) {
+                  const n = record[key];
+                  if (typeof n === 'number' && Number.isFinite(n) && n >= 0) stats[key] = n;
+                }
+              }
+            },
+            signal,
+          );
+          if (!done) throw new OllamaError('La conexión se cerró antes de completar la respuesta.');
+          if (!content.trim()) throw new OllamaError('El modelo respondió sin texto.');
+          stats.clientMs = performance.now() - started;
+          return { content, stats };
+        } catch (error) {
+          if (input.signal?.aborted) throw input.signal.reason;
+          if (signal.aborted) throw new OllamaError('Ollama tardó demasiado en responder.');
+          if (error instanceof OllamaError) throw error;
+          throw new OllamaError(
+            'Se interrumpió la conexión con Ollama o su respuesta no fue válida. Vuelve a intentar.',
+          );
+        }
+      }, signal)
+      .catch((error: unknown) => {
+        if (input.signal?.aborted) throw input.signal.reason;
+        if (signal.aborted) throw new OllamaError('Ollama tardó demasiado en responder.');
+        throw error;
+      });
+  }
+  async embed(model: string, input: string[], signal?: AbortSignal, timeoutMs = 120000): Promise<number[][]> {
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    return inferenceQueue(this.baseUrl).run(
+      () => this.embedComplete(model, input, combined, timeoutMs),
+      combined,
+    );
+  }
+  private async embedComplete(
+    model: string,
+    input: string[],
+    signal: AbortSignal | undefined,
+    timeoutMs: number,
+  ): Promise<number[][]> {
     const r = await this.request<{ embeddings?: number[][] }>('/api/embed', {
       method: 'POST',
       signal,
-      timeoutMs: 120000,
+      timeoutMs,
       // El proveedor debe rechazar un fragmento que no cabe, nunca truncarlo silenciosamente.
       body: JSON.stringify({ model, input, truncate: false, keep_alive: '2m' }),
     });
     if (!r.embeddings?.length || r.embeddings.length !== input.length)
       throw new OllamaError('Ollama no devolvió los vectores esperados.');
+    const dimensions = r.embeddings[0]?.length ?? 0;
+    if (
+      !dimensions ||
+      r.embeddings.some((v) => v.length !== dimensions || v.some((n) => !Number.isFinite(n)))
+    )
+      throw new OllamaError('Ollama devolvió vectores de dimensiones incompatibles o no válidos.');
     return r.embeddings;
   }
 }

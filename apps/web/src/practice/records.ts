@@ -11,6 +11,7 @@ import {
   type Exercise,
   type HistoryPoint,
   type ScenarioId,
+  type DiagnosticReport,
 } from '@oratoria/conversation';
 
 export type PracticeRecord = {
@@ -30,6 +31,7 @@ export type PracticeRecord = {
   goal: string;
   /** Importado del antiguo simulador de defensa. */
   legacy?: boolean;
+  diagnostics?: DiagnosticReport;
 };
 const RecordShape = z
   .object({

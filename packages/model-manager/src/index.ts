@@ -13,6 +13,7 @@ import {
 export * from './managed';
 export * from './ollama';
 export * from './catalog';
+export * from './inference';
 
 /* Compatibilidad: API anterior centrada en Whisper Tiny. */
 export const WHISPER = manifest;

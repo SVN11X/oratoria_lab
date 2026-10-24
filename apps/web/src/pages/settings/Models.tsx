@@ -70,6 +70,7 @@ export function ModelsSection() {
     <div className="stack">
       <HardwarePanel />
       <EnginePanel />
+      {ai.useLlm && <RuntimePanel />}
       {ai.useLlm && ai.provider === 'ollama' && (
         <>
           <ProfilePanel />
@@ -144,6 +145,17 @@ function HardwarePanel() {
             </div>
             <div>
               <strong>
+                {hardware.vramGb == null
+                  ? 'No medible aquí'
+                  : `${hardware.vramGb.toLocaleString('es-CL', { maximumFractionDigits: 1 })} GiB`}
+              </strong>
+              VRAM total
+              {hardware.availableVramGb == null
+                ? ''
+                : ` · ${hardware.availableVramGb.toLocaleString('es-CL', { maximumFractionDigits: 1 })} GiB disponibles`}
+            </div>
+            <div>
+              <strong>
                 {hardware.cpuScore === null
                   ? 'Sin medir'
                   : `${hardware.cpuScore.toLocaleString('es-CL')} GFLOP/s`}
@@ -178,6 +190,41 @@ function HardwarePanel() {
 }
 
 /* ============================ Motor de lenguaje ============================ */
+function RuntimePanel() {
+  const ai = useAi();
+  return (
+    <section className="panel">
+      <h2>Ejecución de la conversación</h2>
+      <label className="field">
+        Perfil de ejecución
+        <select
+          value={ai.conversationMode}
+          onChange={(e) => ai.update({ conversationMode: e.target.value as AiSettings['conversationMode'] })}
+        >
+          <option value="rapida">Conversación rápida</option>
+          <option value="academica">Análisis académico</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>
+          <input
+            type="checkbox"
+            checked={ai.reasoning}
+            onChange={(e) => ai.update({ reasoning: e.target.checked })}
+          />{' '}
+          Permitir razonamiento cuando el modelo lo soporte
+        </span>
+      </label>
+      <p className="caption">
+        El modo rápido limita la longitud de salida y desactiva el razonamiento por defecto. El análisis
+        amplía el presupuesto y permite que el modelo revise el siguiente movimiento; puede tardar más. No
+        cambia ni descarga modelos. La evaluación tiene su propio presupuesto al terminar. Para una GPU de 6
+        GiB, compara primero qwen3.5:4b en «Probar velocidad».
+      </p>
+    </section>
+  );
+}
+
 function EnginePanel() {
   const ai = useAi();
   const inv = useInventory();
@@ -715,6 +762,7 @@ function InventoryPanel() {
                   <p className="caption">
                     Prueba del {new Date(bench.at).toLocaleDateString('es-CL')}: {bench.totalSec} s en total
                     {bench.loadSec !== null ? `, carga ${bench.loadSec} s` : ''}
+                    {bench.firstTokenSec != null ? `, primer token ${bench.firstTokenSec} s` : ''}
                     {bench.tokensPerSec !== null ? `, ${bench.tokensPerSec} tokens/s` : ''} · JSON{' '}
                     {bench.jsonOk ? 'válido' : 'no válido'} · español{' '}
                     {bench.spanishOk ? 'correcto' : 'dudoso'}

@@ -357,6 +357,7 @@ describe('Motor con modelo de lenguaje (doble de prueba)', () => {
     expect(next[0]!.kind).toBe('repregunta');
     expect(next[0]!.generator).toBe('ia');
     expect(engine.turns[0]!.answer!.analysis.type).toBe('contradice_documento');
+    expect(next[0]!.sources.some((citation) => citation.location.includes('pág. 58'))).toBe(true);
   });
 });
 

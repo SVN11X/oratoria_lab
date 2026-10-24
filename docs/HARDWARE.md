@@ -1,3 +1,5 @@
+> **GPU de 6 GiB:** el candidato de conversación equilibrada es Qwen 3.5 4B si está instalado. Se respetan las selecciones existentes. 7B/9B siguen disponibles, pero no se deduce velocidad a partir de la RAM. Véase [MODERNIZACION](MODERNIZACION.md).
+
 # Requisitos de equipo
 
 Oratoria Lab funciona sin ningún modelo: los interlocutores usan el motor de reglas, las respuestas pueden ser escritas o reconocidas por el navegador y el análisis de voz es DSP local. Los modelos agregan naturalidad y calidad, y cada uno tiene un costo de memoria y de disco. Las cifras de esta página son estimaciones de referencia, no mediciones en tu equipo. Para medir tu caso usa **Configuración → Modelos de IA → Probar velocidad**.
@@ -13,13 +15,13 @@ Oratoria Lab funciona sin ningún modelo: los interlocutores usan el motor de re
 
 ## Perfiles de modelos
 
-El perfil sugerido se calcula con lo que la plataforma permite saber. En el navegador la RAM es aproximada (Chrome informa como máximo 8 GB) y no se puede leer el modelo de CPU; la app de escritorio usa los datos del sistema operativo.
+El perfil sugerido se calcula con lo que la plataforma permite saber. En el navegador la RAM es aproximada (Chrome informa como máximo 8 GB), no se conoce la VRAM y el microbenchmark de CPU no permite inferir más memoria. Tauri consulta CPU/RAM del sistema y VRAM NVIDIA mediante nvidia-smi si está disponible; la implementación nativa requiere validación en Windows. No se recomienda un modelo grande solo por tener 32/64 GB de RAM.
 
-| Perfil               | Equipo orientativo                          | Conversación (Ollama) | Búsqueda en tu material | Transcripción | Disco aproximado |
-| -------------------- | ------------------------------------------- | --------------------- | ----------------------- | ------------- | ---------------- |
-| Eficiente            | 8 GB de RAM, sin GPU dedicada               | qwen3.5:2b            | qwen3-embedding:0.6b    | Whisper Tiny  | 3,5 a 4 GB       |
-| Equilibrado          | 16 GB de RAM                                | qwen3.5:4b            | qwen3-embedding:0.6b    | Whisper Base  | 4,5 a 5 GB       |
-| Máxima calidad local | 32 GB de RAM o GPU con 8 a 12 GB de memoria | qwen3.5:9b            | bge-m3                  | Whisper Small | 8 a 9 GB         |
+| Perfil               | Equipo orientativo                                                          | Conversación (Ollama) | Búsqueda en tu material | Transcripción | Disco aproximado |
+| -------------------- | --------------------------------------------------------------------------- | --------------------- | ----------------------- | ------------- | ---------------- |
+| Eficiente            | 8 GB de RAM, sin GPU dedicada                                               | qwen3.5:2b            | qwen3-embedding:0.6b    | Whisper Tiny  | 3,5 a 4 GB       |
+| Equilibrado          | 16 GB de RAM                                                                | qwen3.5:4b            | qwen3-embedding:0.6b    | Whisper Base  | 4,5 a 5 GB       |
+| Máxima calidad local | VRAM medida de al menos 10 GiB, unos 8 disponibles, y prueba real favorable | qwen3.5:9b            | bge-m3                  | Whisper Small | 8 a 9 GB         |
 
 Las voces Piper ocupan entre 63 y 110 MB cada una y usan entre 150 y 300 MB de RAM mientras están cargadas. MediaPipe (cámara) descarga unos 10 MB.
 

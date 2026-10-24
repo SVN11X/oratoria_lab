@@ -72,7 +72,7 @@ type MockModel = {
  * Servidor que imita la API HTTP documentada de Ollama para probar el gestor de modelos sin
  * descargar nada. Registra cada llamada para verificar que solo se usan endpoints oficiales.
  */
-export async function mockOllama(initial: MockModel[]) {
+export async function mockOllama(initial: MockModel[], options: { streamDelayMs?: number } = {}) {
   const models = new Map(initial.map((m) => [m.name, m]));
   const running = new Set<string>();
   const calls: { method: string; path: string; body: unknown }[] = [];
@@ -200,14 +200,29 @@ export async function mockOllama(initial: MockModel[]) {
         content = {
           repregunta: '¿Por qué considera que el algoritmo era el mejor frente a las alternativas?',
         };
-      return json(res, 200, {
+      const result = {
         message: { role: 'assistant', content: JSON.stringify(content) },
         done: true,
         total_duration: 1_200_000_000,
         load_duration: 300_000_000,
         eval_count: 40,
         eval_duration: 800_000_000,
-      });
+      };
+      if (body?.stream) {
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Access-Control-Allow-Origin': '*' });
+        const text = result.message.content;
+        for (let i = 0; i < text.length && !res.destroyed; i += 12) {
+          res.write(
+            JSON.stringify({ message: { role: 'assistant', content: text.slice(i, i + 12) }, done: false }) +
+              '\n',
+          );
+          if (options.streamDelayMs) await new Promise((r) => setTimeout(r, options.streamDelayMs));
+        }
+        if (!res.destroyed)
+          res.end(JSON.stringify({ ...result, message: { role: 'assistant', content: '' } }) + '\n');
+        return;
+      }
+      return json(res, 200, result);
     }
     json(res, 404, { error: 'not found' });
   });

@@ -34,6 +34,7 @@ export async function detectHardware(): Promise<Hardware> {
   const nav = navigator as NavigatorExtras;
   let gpu: string | null = null,
     webgpu = false;
+  let gpuSource: Hardware['gpuSource'] = 'desconocido';
   try {
     const adapter = await nav.gpu?.requestAdapter();
     if (adapter) {
@@ -42,21 +43,39 @@ export async function detectHardware(): Promise<Hardware> {
       gpu =
         [i.vendor, i.architecture, i.description || i.device].filter(Boolean).join(' · ') ||
         'GPU compatible con WebGPU';
+      gpuSource = 'webgpu';
     }
   } catch {
     webgpu = false;
   }
+  if (!gpu) {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    if (gl && info) {
+      gpu = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+      gpuSource = 'webgl';
+    }
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  }
   const sys = await systemInfo();
   const score = cpuScore();
-  if (sys)
+  if (sys) {
+    const nativeGpu = sys.gpus?.slice().sort((a, b) => b.availableMemoryBytes - a.availableMemoryBytes)[0];
     return {
-      ramGb: Math.round(sys.totalMemoryBytes / 1e9),
+      ramGb: Math.round(sys.totalMemoryBytes / 1024 ** 3),
       ramSource: 'sistema',
       cores: sys.cpuCores,
-      gpu,
+      gpu: nativeGpu?.name ?? gpu,
       webgpu,
       cpuScore: score,
+      cpuBrand: sys.cpuBrand || null,
+      availableRamGb: sys.availableMemoryBytes / 1024 ** 3,
+      vramGb: nativeGpu ? nativeGpu.totalMemoryBytes / 1024 ** 3 : null,
+      availableVramGb: nativeGpu ? nativeGpu.availableMemoryBytes / 1024 ** 3 : null,
+      gpuSource: nativeGpu ? 'nvidia-smi' : gpuSource,
     };
+  }
   return {
     ramGb: nav.deviceMemory ?? null,
     ramSource: nav.deviceMemory ? 'navegador' : 'desconocido',
@@ -64,5 +83,9 @@ export async function detectHardware(): Promise<Hardware> {
     gpu,
     webgpu,
     cpuScore: score,
+    vramGb: null,
+    availableVramGb: null,
+    cpuBrand: null,
+    gpuSource,
   };
 }

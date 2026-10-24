@@ -188,6 +188,25 @@ describe('Auditoría de modelos instalados', () => {
 });
 
 describe('Perfiles y selección por función', () => {
+  it('prioriza 4B instalado frente a 7B y 9B en el perfil equilibrado sin sugerir descargas', () => {
+    const plan = planProfile('equilibrado', [
+      model('qwen3.5:9b', 6e9, '9B'),
+      model('qwen2.5:7b', 4.7e9, '7.6B'),
+      model('qwen3.5:4b', 3e9, '4B'),
+      model('qwen3-embedding:0.6b', 640e6, '600M', 'qwen3-embedding'),
+    ]);
+    expect(plan.assignments.conversacion).toBe('qwen3.5:4b');
+    expect(plan.assignments.evaluacion).toBe('qwen3.5:4b');
+    expect(plan.downloads).toEqual([]);
+  });
+
+  it('no infiere VRAM del nombre de GPU ni de un puntaje de CPU', () => {
+    expect(profileForHardware({ ...HW, ramGb: 64, gpu: 'RTX', cpuScore: 1000 })).toBe('equilibrado');
+    expect(profileForHardware({ ...HW, ramGb: 64, vramGb: 24, availableVramGb: 3 })).toBe('equilibrado');
+    expect(profileForHardware({ ...HW, ramGb: null, ramSource: 'desconocido', cpuScore: 1000 })).toBe(
+      'eficiente',
+    );
+  });
   it('reutiliza lo instalado antes de sugerir descargas', () => {
     const plan = planProfile('equilibrado', [
       model('qwen2.5:7b', 4.7e9, '7.6B'),
@@ -207,7 +226,8 @@ describe('Perfiles y selección por función', () => {
   it('elige el perfil según el hardware informado', () => {
     expect(profileForHardware({ ...HW, ramGb: 8 })).toBe('eficiente');
     expect(profileForHardware(HW)).toBe('equilibrado');
-    expect(profileForHardware({ ...HW, ramGb: 32 })).toBe('calidad');
+    expect(profileForHardware({ ...HW, ramGb: 64, gpu: 'NVIDIA RTX 2060', vramGb: 6 })).toBe('equilibrado');
+    expect(profileForHardware({ ...HW, ramGb: 32, vramGb: 12, availableVramGb: 10 })).toBe('calidad');
   });
   it('cada modelo administrado por la app tiene un caché exclusivo', () => {
     const caches = MANAGED.map((m) => m.cache);

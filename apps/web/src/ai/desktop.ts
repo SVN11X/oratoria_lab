@@ -10,6 +10,7 @@ export type SystemInfo = {
   cpuBrand: string;
   cpuCores: number;
   os: string;
+  gpus?: { name: string; totalMemoryBytes: number; availableMemoryBytes: number; source: 'nvidia-smi' }[];
 };
 export type OllamaStorage = {
   /** Carpeta de modelos de Ollama analizada (solo lectura). */

@@ -330,10 +330,10 @@ export function ruleFollowUp(input: {
         'La cifra dicha no coincide con el material.',
         both(
           [
-            `Usted mencionó ${c.said}, pero en ${c.location} aparece ${c.source}. ¿Cuál es el valor correcto y a qué se debe la diferencia?`,
-            `Me dice ${c.said}, pero su propio documento indica ${c.source} (${c.location}). Explique esa diferencia.`,
+            `Usted mencionó ${c.said}; en ${c.location} aparece ${c.source}. ¿Se refieren a la misma medida o a contextos distintos?`,
+            `En su respuesta aparece ${c.said} y en ${c.location}, ${c.source}. ¿Podría aclarar qué representa cada cifra?`,
           ],
-          [`Dijiste ${c.said}, pero en ${c.location} aparece ${c.source}. ¿Cuál es?`],
+          [`Dijiste ${c.said} y en ${c.location} aparece ${c.source}. ¿Se refieren a lo mismo?`],
         ),
       );
     }

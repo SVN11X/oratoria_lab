@@ -1,3 +1,5 @@
+> Esta auditoría histórica se amplía en [MODERNIZACION](MODERNIZACION.md), con problemas comprobados, funciones afectadas, decisiones, pruebas y pendientes.
+
 # Auditoría e implementación V2
 
 Fecha: 23 de octubre de 2026. Base real: `cf8433151ea3743fb1b1e9862537eb68d4c61bae`, rama pública `main`. Entrega: 0.3.0. No se inspeccionó el disco del computador Windows del usuario ni se modificó el remoto.

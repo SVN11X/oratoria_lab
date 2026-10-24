@@ -1,6 +1,7 @@
 import type { Block, Extracted } from './extract';
 import { jaccard, numericClaims, tokenize } from './text';
 import { keyTerms } from '@oratoria/defense';
+import type { AcademicProfile } from './preparation';
 
 export type DocKind =
   | 'tesis'
@@ -39,6 +40,8 @@ export type SourceDoc = {
   chunks: number;
   outline: { heading: string; level: number; location: string }[];
   warnings: string[];
+  /** Preparación extractiva derivada; no sustituye ni modifica el archivo original. */
+  academicProfile?: AcademicProfile;
 };
 export type Chunk = {
   id: string;
@@ -64,6 +67,19 @@ const location = (b: Pick<Block, 'page' | 'slide' | 'heading'>, format: Extracte
 };
 function sentences(text: string): string[] {
   return text.split(/(?<=[.!?;:])\s+(?=[A-ZÁÉÍÓÚÑ¿¡0-9«"(])/u).filter(Boolean);
+}
+function boundedParts(text: string, max: number): string[] {
+  const out: string[] = [];
+  while (text.length > max) {
+    let end = text.lastIndexOf(' ', max);
+    if (end < max / 2) end = max;
+    // No dividir un par sustituto de Unicode.
+    if (/[\uD800-\uDBFF]/.test(text[end - 1] ?? '')) end--;
+    out.push(text.slice(0, end));
+    text = text.slice(end).trimStart();
+  }
+  if (text) out.push(text);
+  return out;
 }
 /**
  * Segmenta respetando la estructura: un fragmento no cruza de una página, diapositiva o sección
@@ -112,7 +128,7 @@ export function segment(doc: Pick<SourceDoc, 'id' | 'name'>, extracted: Extracte
     }
     const text = b.notes ? `Notas del orador: ${b.text}` : b.text;
     if (text.length > target * 1.4) {
-      for (const s of sentences(text)) {
+      for (const s of sentences(text).flatMap((s) => boundedParts(s, Math.max(200, target)))) {
         if (size + s.length > target && size > target * 0.4) push();
         buffer.push(s);
         size += s.length;
@@ -124,10 +140,9 @@ export function segment(doc: Pick<SourceDoc, 'id' | 'name'>, extracted: Extracte
     }
   }
   if (buffer.length) push();
-  // Fragmentos que solo repiten la oración de solapamiento se eliminan.
-  return chunks
-    .filter((c, i) => i === 0 || c.text !== sentences(chunks[i - 1]!.text).slice(-1)[0])
-    .map((c, i) => ({ ...c, order: i, id: `${doc.id}:${i}` }));
+  // Dos fragmentos iguales también pueden ser contenido legítimo (tablas o cadenas repetidas).
+  // El solapamiento se controla en push; nunca se elimina texto por igualdad de sus bytes.
+  return chunks.map((c, i) => ({ ...c, order: i, id: `${doc.id}:${i}` }));
 }
 export function outlineOf(extracted: Extracted) {
   return extracted.blocks
@@ -161,7 +176,7 @@ export class Bm25 {
     });
     this.avg = this.lengths.reduce((a, b) => a + b, 0) / Math.max(1, this.lengths.length);
   }
-  search(query: string, k = 10): { index: number; score: number }[] {
+  search(query: string, k = 10, allowed?: (index: number) => boolean): { index: number; score: number }[] {
     const N = this.items.length;
     const scores = new Map<number, number>();
     for (const t of new Set(tokenize(query))) {
@@ -169,6 +184,7 @@ export class Bm25 {
       if (!p) continue;
       const idf = Math.log(1 + (N - p.size + 0.5) / (p.size + 0.5));
       for (const [i, tf] of p) {
+        if (allowed && !allowed(i)) continue;
         const len = this.lengths[i] ?? 0;
         const s =
           (idf * tf * (this.k1 + 1)) / (tf + this.k1 * (1 - this.b + (this.b * len) / (this.avg || 1)));
@@ -201,6 +217,7 @@ export type SearchOptions = {
   queryVector?: number[] | null;
   /** Limitar a documentos concretos. */
   docIds?: string[];
+  sections?: string[];
   /** 0 = solo relevancia; 1 = máxima diversidad. */
   diversity?: number;
 };
@@ -225,8 +242,12 @@ export class KnowledgeIndex {
     const k = options.k ?? 5;
     if (!this.chunks.length || !query.trim()) return [];
     const allowed = options.docIds ? new Set(options.docIds) : null;
-    const ok = (i: number) => !allowed || allowed.has(this.chunks[i]!.docId);
-    const lexical = this.bm25.search(query, 40).filter((h) => ok(h.index));
+    const sections = options.sections ? new Set(options.sections) : null;
+    const ok = (i: number) =>
+      (!allowed || allowed.has(this.chunks[i]!.docId)) &&
+      (!sections || sections.has(this.chunks[i]!.section ?? ''));
+    // Filtrar antes del top-k evita perder una sección detrás de 40 resultados de otros documentos.
+    const lexical = this.bm25.search(query, 40, ok);
     const fused = new Map<number, number>();
     lexical.forEach((h, rank) => fused.set(h.index, (fused.get(h.index) ?? 0) + 1 / (60 + rank)));
     if (options.queryVector && this.vectors?.size) {

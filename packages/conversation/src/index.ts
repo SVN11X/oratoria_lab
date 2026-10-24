@@ -9,3 +9,4 @@ export * from './engine';
 export * from './evaluation';
 export * from './coach';
 export * from './speech';
+export * from './diagnostics';

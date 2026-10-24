@@ -1,3 +1,5 @@
+> **Protocolo actualizado:** `pnpm benchmark:local --models 'qwen3.5:4b,qwen2.5:7b,qwen3.5:9b' --repeat 3 --output benchmark-modernizacion.json`. Usa NDJSON, casos ficticios comunes, contexto 4096 y límite 160. Los campos de primer token/carga y las repeticiones permiten una comparación controlada; todavía se necesita ejecutarla con los pesos reales. Detalle: [MODERNIZACION](MODERNIZACION.md).
+
 # Comparación y benchmark reproducible
 
 Revisión: 23 de octubre de 2026. Las columnas comerciales reflejan documentación pública de los proveedores. No se probaron sus cuentas, modelos ni tratamientos internos de datos. «No verificado» no significa que una función no exista.

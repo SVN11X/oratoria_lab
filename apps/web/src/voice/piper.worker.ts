@@ -90,6 +90,7 @@ async function phonemeIds(text: string, espeakVoice: string, base: string): Prom
 
 self.onmessage = async (event: MessageEvent<Request>) => {
   const req = event.data;
+  const started = performance.now();
   try {
     const { session, config } = await getVoice(req.voice, req.base);
     if (req.type === 'load') {
@@ -121,7 +122,16 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     const out = await session.run(feeds);
     const audio = (out.output ?? out[session.outputNames[0]!])!.data as Float32Array;
     const pcm = Float32Array.from(audio);
-    self.postMessage({ id: req.id, ok: true, pcm, sampleRate: config.audio.sample_rate }, [pcm.buffer]);
+    self.postMessage(
+      {
+        id: req.id,
+        ok: true,
+        pcm,
+        sampleRate: config.audio.sample_rate,
+        synthesisMs: performance.now() - started,
+      },
+      [pcm.buffer],
+    );
   } catch (error) {
     self.postMessage({
       id: req.id,

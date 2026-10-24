@@ -62,7 +62,7 @@ async fn delete_session(state: State<'_, LocalStore>, id: String) -> Result<(), 
 /// Memoria, CPU y sistema operativo, para recomendar modelos con datos reales.
 #[tauri::command]
 async fn system_info() -> Result<models::SystemInfo, String> {
-    Ok(models::system_info())
+    tauri::async_runtime::spawn_blocking(models::system_info).await.map_err(|e| e.to_string())
 }
 /// Lee (sin modificar) los manifiestos de Ollama para calcular capas compartidas y el espacio real.
 #[tauri::command]

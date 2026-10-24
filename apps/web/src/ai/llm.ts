@@ -1,4 +1,4 @@
-import { OllamaClient, OllamaError } from '@oratoria/model-manager';
+import { OllamaClient, OllamaError, type ChatInput } from '@oratoria/model-manager';
 import type { LlmPort } from '@oratoria/conversation';
 import { useAi, type AiSettings, type Bench } from './settings';
 
@@ -9,23 +9,34 @@ export const ollama = (s: Pick<AiSettings, 'ollamaUrl'> = useAi.getState()) => n
 
 /** Adaptador hacia Ollama con su API nativa: salidas JSON con esquema y sin «razonamiento» visible. */
 export class OllamaPort implements LlmPort {
+  get contextBudgetChars() {
+    return this.settings.conversationMode === 'rapida' ? 10500 : 22000;
+  }
   constructor(
     readonly model: string,
     private client = ollama(),
+    private role: 'conversacion' | 'evaluacion' = 'conversacion',
+    private settings = useAi.getState(),
   ) {}
-  private async thinks() {
-    if (!thinkingCache.has(this.model)) {
-      const caps = await this.client
-        .show(this.model)
-        .then((s) => s.capabilities ?? [])
-        .catch(() => [] as string[]);
-      thinkingCache.set(this.model, caps.includes('thinking'));
+  private async thinks(signal?: AbortSignal) {
+    const key = `${this.client.baseUrl}|${this.model}`;
+    if (!thinkingCache.has(key)) {
+      try {
+        const info = await this.client.show(this.model, signal);
+        thinkingCache.set(key, (info.capabilities ?? []).includes('thinking'));
+      } catch (error) {
+        signal?.throwIfAborted();
+        // No memorizar como incompatible una desconexión temporal.
+        if (error instanceof OllamaError) return false;
+        throw error;
+      }
     }
-    return thinkingCache.get(this.model)!;
+    return thinkingCache.get(key)!;
   }
   async complete(messages: Message[], o: Parameters<LlmPort['complete']>[1]) {
-    const think = (await this.thinks()) ? false : undefined;
-    const r = await this.client.chat({
+    const think = (await this.thinks(o.signal)) ? this.settings.reasoning : undefined;
+    const fast = this.role === 'conversacion' && this.settings.conversationMode === 'rapida';
+    const input: ChatInput = {
       model: this.model,
       messages,
       format: o.json ? (o.schema ?? 'json') : undefined,
@@ -33,7 +44,20 @@ export class OllamaPort implements LlmPort {
       temperature: o.temperature,
       signal: o.signal,
       timeoutMs: o.timeoutMs,
-      numCtx: 8192,
+      numCtx: fast ? 4096 : 8192,
+      numPredict: fast ? 256 : this.role === 'evaluacion' ? 4096 : 512,
+    };
+    const r = o.onDelta ? await this.client.chatStream(input, o.onDelta) : await this.client.chat(input);
+    const stats = r.stats;
+    o.onMetrics?.({
+      firstTokenMs: stats.firstTokenMs,
+      queueMs: stats.queueMs,
+      loadMs: stats.load_duration === undefined ? undefined : stats.load_duration / 1e6,
+      promptMs: stats.prompt_eval_duration === undefined ? undefined : stats.prompt_eval_duration / 1e6,
+      tokensPerSecond:
+        stats.eval_count !== undefined && stats.eval_duration
+          ? stats.eval_count / (stats.eval_duration / 1e9)
+          : undefined,
     });
     useAi.getState().touch(this.model);
     return r.content;
@@ -73,6 +97,7 @@ export class OpenAiPort implements LlmPort {
       response = await send(o.json);
       if (response.status === 400 && o.json) response = await send(false);
     } catch (error) {
+      if (o.signal?.aborted) throw o.signal.reason;
       if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError'))
         throw new Error('El modelo tardó demasiado en responder.');
       throw new Error(
@@ -110,7 +135,7 @@ export function llmFor(
   const model = (
     role === 'evaluacion' ? s.assign.evaluacion || s.assign.conversacion : s.assign.conversacion
   ).trim();
-  return model ? new OllamaPort(model, ollama(s)) : null;
+  return model ? new OllamaPort(model, ollama(s), role, { ...useAi.getState(), ...s }) : null;
 }
 
 const BENCH_PROMPT: Message[] = [
@@ -138,15 +163,20 @@ export async function benchmark(model: string, signal?: AbortSignal): Promise<Be
     .then((s) => (s.capabilities ?? []).includes('thinking'))
     .catch(() => false);
   try {
-    const r = await client.chat({
-      model,
-      messages: BENCH_PROMPT,
-      format: 'json',
-      think: thinks ? false : undefined,
-      temperature: 0.2,
-      signal,
-      timeoutMs: 180000,
-    });
+    const r = await client.chatStream(
+      {
+        model,
+        messages: BENCH_PROMPT,
+        format: 'json',
+        think: thinks ? false : undefined,
+        temperature: 0.2,
+        signal,
+        timeoutMs: 180000,
+        numCtx: 4096,
+        numPredict: 160,
+      },
+      () => undefined,
+    );
     const totalSec = (performance.now() - started) / 1000;
     let jsonOk = false,
       text = '';
@@ -169,6 +199,7 @@ export async function benchmark(model: string, signal?: AbortSignal): Promise<Be
       jsonOk,
       spanishOk: SPANISH.test(text),
       note: text.slice(0, 200),
+      firstTokenSec: s.firstTokenMs === undefined ? null : Math.round(s.firstTokenMs) / 1000,
     };
     useAi.setState((st) => ({ bench: { ...st.bench, [model]: result } }));
     return result;

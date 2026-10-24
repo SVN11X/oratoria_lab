@@ -15,7 +15,13 @@ export type VoiceSpec = {
   /** Índice del interlocutor, para repartir voces distintas. */
   seed: number;
 };
-export type SpeakEvents = { onMouth?: (m: Mouth, level: number) => void; onEnd?: () => void };
+export type SpeakEvents = {
+  onMouth?: (m: Mouth, level: number) => void;
+  onEnd?: () => void;
+  /** Inicio real de reproducción, no el instante en que se solicita sintetizar. */
+  onStart?: () => void;
+  onSynthesis?: (ms: number) => void;
+};
 export type SpeakHandle = { done: Promise<void>; cancel: () => void };
 export interface Tts {
   readonly id: string;
@@ -91,6 +97,7 @@ export class SystemTts implements Tts {
   }
   speak(text: string, v: VoiceSpec, ev: SpeakEvents = {}): SpeakHandle {
     let cancelled = false;
+    let endCurrent = () => {};
     const voice = this.pick(v);
     // Con pocas voces, el tono distingue a los interlocutores.
     const distinctVoice = voice && this.voices.filter((x) => voiceGender(x) === v.gender).length > v.seed;
@@ -133,9 +140,11 @@ export class SystemTts implements Tts {
             raf = requestAnimationFrame(loop);
           };
           u.onstart = () => {
+            if (cancelled || finished) return;
             start = performance.now();
             anchorAt = start;
             loop();
+            ev.onStart?.();
           };
           u.onboundary = (e) => {
             anchor = progressAtChar(track, e.charIndex);
@@ -149,6 +158,7 @@ export class SystemTts implements Tts {
             ev.onMouth?.({ open: 0, wide: 0.5, round: 0 }, 0);
             resolve();
           };
+          endCurrent = end;
           // Algunos navegadores no emiten «end»; se usa un tiempo máximo.
           const guard = setTimeout(end, expected * 2.5 + 3000);
           u.onend = end;
@@ -162,6 +172,7 @@ export class SystemTts implements Tts {
       done,
       cancel: () => {
         cancelled = true;
+        endCurrent(); // Cancelar no siempre emite onend en Web Speech.
         if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
       },
     };
@@ -179,6 +190,7 @@ function playPcm(
   text: string,
   ev: SpeakEvents,
   cancelled: () => boolean,
+  signal?: AbortSignal,
 ) {
   const ctx = audioContext();
   const buffer = ctx.createBuffer(1, pcm.length, rate);
@@ -193,15 +205,33 @@ function playPcm(
   const track = visemeTrack(text);
   const duration = buffer.duration / playbackRate;
   return new Promise<void>((resolve) => {
-    let raf = 0;
+    let raf = 0,
+      ended = false,
+      started = false;
     const t0 = ctx.currentTime;
-    const loop = () => {
-      if (cancelled()) {
+    const end = () => {
+      if (ended) return;
+      ended = true;
+      cancelAnimationFrame(raf);
+      signal?.removeEventListener('abort', stop);
+      src.disconnect();
+      analyser.disconnect();
+      ev.onMouth?.({ open: 0, wide: 0.5, round: 0 }, 0);
+      resolve();
+    };
+    const stop = () => {
+      if (started) {
         try {
           src.stop();
         } catch {
           /* ya detenido */
         }
+      }
+      end();
+    };
+    const loop = () => {
+      if (cancelled()) {
+        stop();
         return;
       }
       analyser.getFloatTimeDomainData(data);
@@ -212,25 +242,34 @@ function playPcm(
       ev.onMouth?.({ ...m, open: Math.min(1, m.open * 0.55 + level * 0.75) }, level);
       raf = requestAnimationFrame(loop);
     };
-    src.onended = () => {
-      cancelAnimationFrame(raf);
-      ev.onMouth?.({ open: 0, wide: 0.5, round: 0 }, 0);
-      resolve();
-    };
-    void ctx.resume().then(() => {
-      src.start();
-      loop();
-    });
+    src.onended = end;
+    signal?.addEventListener('abort', stop, { once: true });
+    if (signal?.aborted || cancelled()) return stop();
+    void ctx
+      .resume()
+      .then(() => {
+        if (ended || cancelled()) return stop();
+        src.start();
+        started = true;
+        ev.onStart?.();
+        loop();
+      })
+      .catch(end);
   });
 }
 
 /* ----------------------------------- Piper (local) ----------------------------------- */
 let piperWorker: Worker | null = null;
 let seq = 0;
-const pending = new Map<
-  number,
-  (v: { ok: boolean; pcm?: Float32Array; sampleRate?: number; error?: string; speakers?: number }) => void
->();
+const pending = new Map<number, (v: PiperResult) => void>();
+type PiperResult = {
+  ok: boolean;
+  pcm?: Float32Array;
+  sampleRate?: number;
+  error?: string;
+  speakers?: number;
+  synthesisMs?: number;
+};
 function piper() {
   if (!piperWorker) {
     piperWorker = new Worker(new URL('./piper.worker.ts', import.meta.url), { type: 'module' });
@@ -238,19 +277,32 @@ function piper() {
       pending.get(e.data.id)?.(e.data as never);
       pending.delete(e.data.id);
     };
+    piperWorker.onerror = () => {
+      for (const resolve of pending.values()) resolve({ ok: false, error: 'El motor Piper se detuvo.' });
+      pending.clear();
+      piperWorker?.terminate();
+      piperWorker = null;
+    };
   }
   return piperWorker;
 }
-function callPiper(msg: Record<string, unknown>) {
+function callPiper(msg: Record<string, unknown>, signal?: AbortSignal) {
   const id = ++seq;
-  return new Promise<{
-    ok: boolean;
-    pcm?: Float32Array;
-    sampleRate?: number;
-    error?: string;
-    speakers?: number;
-  }>((resolve) => {
-    pending.set(id, resolve);
+  return new Promise<PiperResult>((resolve) => {
+    const abort = () => finish({ ok: false, error: 'Síntesis cancelada.' });
+    const finish = (value: PiperResult) => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+      pending.delete(id);
+      resolve(value);
+    };
+    const timeout = setTimeout(
+      () => finish({ ok: false, error: 'Piper tardó demasiado en responder.' }),
+      120000,
+    );
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    pending.set(id, finish);
     piper().postMessage({ ...msg, id, base: basePath });
   });
 }
@@ -262,6 +314,7 @@ export async function loadPiperVoice(voice: string) {
 export function releasePiper() {
   piperWorker?.terminate();
   piperWorker = null;
+  for (const resolve of pending.values()) resolve({ ok: false, error: 'Motor de voz reiniciado.' });
   pending.clear();
 }
 /** Voz neuronal Piper ejecutada en este equipo. */
@@ -282,31 +335,55 @@ export class PiperTts implements Tts {
   }
   speak(text: string, v: VoiceSpec, ev: SpeakEvents = {}): SpeakHandle {
     let cancelled = false;
+    const controller = new AbortController();
     const { id, speaker } = this.voiceFor(v);
     // La altura se ajusta con la velocidad de reproducción; la duración se compensa al sintetizar.
     const playbackRate = Math.max(0.85, Math.min(1.18, v.pitch));
     const lengthScale = playbackRate / Math.max(0.6, Math.min(1.5, v.rate));
     const done = (async () => {
       const list = phrases(text);
-      let next = callPiper({ type: 'speak', voice: id, text: list[0]!.text, speaker, lengthScale });
+      if (!list.length) return;
+      let next = callPiper(
+        { type: 'speak', voice: id, text: list[0]!.text, speaker, lengthScale },
+        controller.signal,
+      );
       for (let i = 0; i < list.length && !cancelled; i++) {
         const r = await next;
+        if (cancelled) return; // Un PCM de una intervención antigua nunca debe reproducirse.
         if (!r.ok || !r.pcm) throw new Error(r.error ?? 'No se pudo sintetizar la voz.');
+        if (r.synthesisMs !== undefined) ev.onSynthesis?.(r.synthesisMs);
         if (i + 1 < list.length)
-          next = callPiper({
-            type: 'speak',
-            voice: id,
-            text: list[i + 1]!.text,
-            speaker,
-            lengthScale:
-              lengthScale *
-              (i + 1 === list.length - 1 && /\?$/.test(list[i + 1]!.text) ? 1 + v.emphasis * 0.05 : 1),
-          });
-        await playPcm(r.pcm, r.sampleRate!, playbackRate, list[i]!.text, ev, () => cancelled);
+          next = callPiper(
+            {
+              type: 'speak',
+              voice: id,
+              text: list[i + 1]!.text,
+              speaker,
+              lengthScale:
+                lengthScale *
+                (i + 1 === list.length - 1 && /\?$/.test(list[i + 1]!.text) ? 1 + v.emphasis * 0.05 : 1),
+            },
+            controller.signal,
+          );
+        await playPcm(
+          r.pcm,
+          r.sampleRate!,
+          playbackRate,
+          list[i]!.text,
+          ev,
+          () => cancelled,
+          controller.signal,
+        );
         if (i + 1 < list.length) await sleep(v.pause * list[i]!.pause, () => cancelled);
       }
     })().finally(() => ev.onEnd?.());
-    return { done, cancel: () => (cancelled = true) };
+    return {
+      done,
+      cancel: () => {
+        cancelled = true;
+        controller.abort();
+      },
+    };
   }
 }
 
@@ -337,6 +414,7 @@ export class ServerTts implements Tts {
     let cancelled = false;
     const controller = new AbortController();
     const done = (async () => {
+      const started = performance.now();
       const r = await fetch(`${this.cfg.baseUrl.replace(/\/+$/, '')}/audio/speech`, {
         method: 'POST',
         signal: controller.signal,
@@ -351,10 +429,24 @@ export class ServerTts implements Tts {
         }),
       });
       if (!r.ok) throw new Error(`El servidor de voz respondió ${r.status}.`);
+      if (cancelled) return;
       const decoded = await audioContext().decodeAudioData(await r.arrayBuffer());
       if (cancelled) return;
-      await playPcm(decoded.getChannelData(0), decoded.sampleRate, 1, text, ev, () => cancelled);
-    })().finally(() => ev.onEnd?.());
+      ev.onSynthesis?.(performance.now() - started);
+      await playPcm(
+        decoded.getChannelData(0),
+        decoded.sampleRate,
+        1,
+        text,
+        ev,
+        () => cancelled,
+        controller.signal,
+      );
+    })()
+      .catch((error: unknown) => {
+        if (!cancelled) throw error;
+      })
+      .finally(() => ev.onEnd?.());
     return {
       done,
       cancel: () => {

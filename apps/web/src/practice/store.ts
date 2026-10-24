@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { RenderQuality } from './render-profile';
 import {
   SCENARIOS,
   SCENARIO_ORDER,
@@ -26,6 +27,7 @@ export type PracticeSetup = {
   camera: boolean;
   inputMode: 'voz' | 'texto';
   avatars: '3d' | 'ilustrados';
+  renderQuality: RenderQuality;
   record: boolean;
   indicators: boolean;
   captions: boolean;
@@ -57,6 +59,7 @@ export function defaultSetup(id: ScenarioId): PracticeSetup {
     camera: false,
     inputMode: 'voz',
     avatars: '3d',
+    renderQuality: 'equilibrado',
     record: true,
     indicators: true,
     captions: true,

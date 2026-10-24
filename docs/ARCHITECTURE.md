@@ -1,3 +1,5 @@
+> La sala incorpora una ruta conversacional directa con streaming NDJSON, planificación local, evaluación separada, diagnóstico y preparación documental reutilizable. Detalle y límites: [MODERNIZACION](MODERNIZACION.md). La ruta estructurada anterior se conserva por compatibilidad.
+
 # Arquitectura
 
 ## Visión general

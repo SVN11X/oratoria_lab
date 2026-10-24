@@ -18,6 +18,7 @@ import { basePath } from '../services';
 import type { AvatarHandle, AvatarMode } from './Avatar';
 import type { Mouth } from '../voice/visemes';
 import { humanLook } from './human-look';
+import { RENDER_PROFILES, type RenderQuality } from './render-profile';
 
 const REST: Mouth = { open: 0, wide: 0.5, round: 0 };
 const rotation = new Quaternion();
@@ -35,6 +36,9 @@ class HumanRig implements AvatarHandle {
   private raised = false;
   private reaction: { until: number; good: boolean } | null = null;
   private originals: Map<string, Quaternion>;
+  private nextBlink: number | null = null;
+  private blinkStarted = -Infinity;
+  private blinkCount = 0;
   constructor(
     readonly avatar: HumanAvatar,
     private temperament: Temperament,
@@ -84,9 +88,18 @@ class HumanRig implements AvatarHandle {
       eyeSquintLeft: skeptical ? 0.1 : 0,
       eyeSquintRight: skeptical ? 0.1 : 0,
     };
-    const blinkCycle = t % (4.1 + this.seed * 0.23);
+    const noise = (n: number) => {
+      const x = Math.sin(n * 12.9898 + this.seed * 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    this.nextBlink ??= ms + 900 + noise(1) * 3100;
+    if (!still && ms >= this.nextBlink) {
+      this.blinkStarted = ms;
+      this.nextBlink = ms + 2800 + noise(++this.blinkCount + 2) * 3700;
+    }
+    const blinkCycle = (ms - this.blinkStarted) / 1000;
     expr.eyeBlinkLeft = expr.eyeBlinkRight =
-      !still && blinkCycle < 0.18 ? Math.sin((blinkCycle / 0.18) * Math.PI) : 0;
+      !still && blinkCycle >= 0 && blinkCycle < 0.18 ? Math.sin((blinkCycle / 0.18) * Math.PI) : 0;
     for (const [key, value] of Object.entries(expr)) this.avatar.setExpression(key, value);
     for (const b of this.avatar.bones) {
       const base = this.originals.get(b.name)!;
@@ -116,6 +129,8 @@ type Props = {
   handles: { current: Map<string, AvatarHandle> };
   speakerId?: string | null;
   paused?: boolean;
+  quality?: RenderQuality;
+  generating?: boolean;
   onFallback: () => void;
 };
 
@@ -125,12 +140,14 @@ export const HumanCommittee = memo(function HumanCommittee({
   handles,
   speakerId,
   paused,
+  quality = 'equilibrado',
+  generating = false,
   onFallback,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const restart = useRef(() => {});
-  const latest = useRef({ speakerId, paused });
-  latest.current = { speakerId, paused };
+  const latest = useRef({ speakerId, paused, generating });
+  latest.current = { speakerId, paused, generating };
   const [status, setStatus] = useState('Preparando participantes 3D en este equipo…');
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -178,7 +195,10 @@ export const HumanCommittee = memo(function HumanCommittee({
       raf = 0;
       if (!alive || document.hidden || !inView) return;
       raf = requestAnimationFrame(draw);
-      if (!ready || !renderer || now - previous < 1000 / 30) return;
+      const fps = latest.current.generating
+        ? Math.min(20, RENDER_PROFILES[quality].fps)
+        : RENDER_PROFILES[quality].fps;
+      if (!ready || !renderer || now - previous < 1000 / fps) return;
       previous = now;
       const width = el.clientWidth,
         height = el.clientHeight;
@@ -219,7 +239,7 @@ export const HumanCommittee = memo(function HumanCommittee({
     void (async () => {
       try {
         renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
-        renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
+        renderer.setPixelRatio(Math.min(RENDER_PROFILES[quality].pixelRatio, window.devicePixelRatio || 1));
         renderer.outputColorSpace = SRGBColorSpace;
         renderer.toneMapping = ACESFilmicToneMapping;
         renderer.setClearColor(0x000000, 0);
@@ -290,7 +310,7 @@ export const HumanCommittee = memo(function HumanCommittee({
       renderer?.forceContextLoss();
       renderer?.domElement.remove();
     };
-  }, [participants, handles]);
+  }, [participants, handles, quality]);
   useEffect(() => {
     restart.current();
   }, [paused]);

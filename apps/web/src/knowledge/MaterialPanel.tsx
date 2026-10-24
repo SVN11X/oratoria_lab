@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileText, Upload, Trash2, Sparkles, ListTree, GitCompare, CircleAlert } from 'lucide-react';
+import {
+  FileText,
+  Upload,
+  Trash2,
+  Sparkles,
+  ListTree,
+  GitCompare,
+  CircleAlert,
+  RefreshCw,
+} from 'lucide-react';
 import { errorMessage } from '@oratoria/core';
 import type { CompareFinding } from '@oratoria/knowledge';
 import { Alert, Confirm } from '../components';
@@ -13,6 +22,7 @@ import {
   listDocuments,
   removeDocument,
   vectorCoverage,
+  reindexDocument,
   type DocKind,
   type ImportProgress,
   type SourceDoc,
@@ -119,6 +129,21 @@ export function MaterialPanel({
     setComparison((await compareDocs(main.id, slides.id)).findings);
   }
   const chosen = docs.filter((d) => selected.includes(d.id));
+  async function reindex(id: string) {
+    setError('');
+    try {
+      await reindexDocument(id, setProgress);
+      await refresh();
+      setStatus(
+        'Índice reconstruido. El archivo original se conserva; puedes volver a generar sus embeddings.',
+      );
+      setCoverage(await vectorCoverage(selected));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setProgress(null);
+    }
+  }
   const canCompare = chosen.some((d) => d.kind === 'tesis') && chosen.some((d) => d.kind === 'presentacion');
   const totalChars = chosen.reduce((n, d) => n + d.chars, 0);
   return (
@@ -169,7 +194,9 @@ export function MaterialPanel({
                 ? 'Extrayendo texto'
                 : progress.phase === 'segmentando'
                   ? 'Dividiendo por secciones'
-                  : 'Guardando'}
+                  : progress.phase === 'preparando'
+                    ? 'Preparando el mapa académico'
+                    : 'Guardando'}
             : {progress.detail}
           </p>
         )}
@@ -213,6 +240,14 @@ export function MaterialPanel({
                   ))}
               </div>
               <div className="row-wrap">
+                <button
+                  className="icon-button"
+                  aria-label={`Reindexar ${d.name}`}
+                  disabled={!!progress || !!embedding}
+                  onClick={() => void reindex(d.id)}
+                >
+                  <RefreshCw size={16} />
+                </button>
                 {d.outline.length > 0 && (
                   <button
                     className="icon-button"
@@ -231,13 +266,27 @@ export function MaterialPanel({
                 </button>
               </div>
               {outline === d.id && (
-                <ul className="plain-list" style={{ gridColumn: '1 / -1' }}>
-                  {d.outline.slice(0, 60).map((o, i) => (
-                    <li key={i} style={{ marginLeft: (o.level - 1) * 14 }}>
-                      {o.heading} <small>{o.location}</small>
-                    </li>
-                  ))}
-                </ul>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <p className="caption">
+                    Preparación extractiva derivada. Las preguntas se contrastan con los fragmentos
+                    originales.
+                  </p>
+                  {d.academicProfile && (
+                    <p className="caption">
+                      Áreas detectadas:{' '}
+                      {Object.keys(d.academicProfile.facets).join(', ') ||
+                        'sin encabezados académicos identificados'}
+                      .
+                    </p>
+                  )}
+                  <ul className="plain-list">
+                    {d.outline.slice(0, 60).map((o, i) => (
+                      <li key={i} style={{ marginLeft: (o.level - 1) * 14 }}>
+                        {o.heading} <small>{o.location}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           ))}
@@ -250,7 +299,7 @@ export function MaterialPanel({
           pregunta se buscan los fragmentos pertinentes y se cita su ubicación.
         </p>
       )}
-      {chosen.length > 0 && ai.useLlm && ai.assign.embeddings && coverage && coverage.total > 0 && (
+      {chosen.length > 0 && ai.assign.embeddings && coverage && coverage.total > 0 && (
         <div className="actions">
           {coverage.have < coverage.total ? (
             <button className="button secondary" onClick={() => void embed()} disabled={!!embedding}>
@@ -269,7 +318,7 @@ export function MaterialPanel({
           )}
         </div>
       )}
-      {chosen.length > 0 && (!ai.useLlm || !ai.assign.embeddings) && (
+      {chosen.length > 0 && !ai.assign.embeddings && (
         <p className="caption">
           Sin modelo de embeddings, la búsqueda usa coincidencia de palabras (BM25). Puedes asignar uno en
           Configuración → Modelos de IA.

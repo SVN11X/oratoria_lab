@@ -6,10 +6,15 @@ import {
   outlineOf,
   segment,
   sha256Hex,
+  prepareAcademicProfile,
+  expandEvidence,
+  QueryVectorCache,
   type Chunk,
   type DocKind,
   type PdfJs,
   type SourceDoc,
+  type AcademicProfile,
+  type Extracted,
 } from '@oratoria/knowledge';
 import { libraryStore } from '@oratoria/storage';
 import type { RetrievedChunk } from '@oratoria/conversation';
@@ -34,7 +39,7 @@ async function pdfjs(): Promise<PdfJs> {
 }
 
 export type ImportProgress = {
-  phase: 'leyendo' | 'extrayendo' | 'segmentando' | 'guardando';
+  phase: 'leyendo' | 'extrayendo' | 'segmentando' | 'preparando' | 'guardando';
   detail: string;
 };
 export function guessKind(name: string): DocKind {
@@ -49,6 +54,54 @@ export function guessKind(name: string): DocKind {
   if (/tesis|memoria|informe|thesis/.test(n)) return 'tesis';
   return 'otro';
 }
+
+async function processMaterial(
+  file: File,
+  bytes: Uint8Array,
+  id: string,
+  onProgress: (p: ImportProgress) => void,
+): Promise<{ extracted: Extracted; chunks: Chunk[]; academicProfile: AcademicProfile }> {
+  let extracted: Extracted | undefined;
+  if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf')
+    extracted = await extractFile(
+      { name: file.name, type: file.type, bytes },
+      {
+        pdfjs: await pdfjs(),
+        onProgress: (p, t) => onProgress({ phase: 'extrayendo', detail: `página ${p} de ${t}` }),
+      },
+    );
+  const doc = { id, name: file.name };
+  if (typeof Worker === 'undefined') {
+    extracted ??= await extractFile({ name: file.name, type: file.type, bytes });
+    const chunks = segment(doc, extracted);
+    return { extracted, chunks, academicProfile: prepareAcademicProfile(chunks) };
+  }
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./processing.worker.ts', import.meta.url), { type: 'module' });
+    const end = () => {
+      clearTimeout(timeout);
+      worker.terminate();
+    };
+    const timeout = setTimeout(() => {
+      end();
+      reject(new Error('El archivo tardó demasiado en procesarse. El original se conserva.'));
+    }, 120000);
+    worker.onerror = () => {
+      end();
+      reject(new Error('No se pudo procesar el material en segundo plano.'));
+    };
+    worker.onmessage = (event) => {
+      if (event.data.error) {
+        end();
+        reject(new Error(String(event.data.error)));
+      } else if (event.data.result) {
+        end();
+        resolve(event.data.result);
+      } else onProgress(event.data as ImportProgress);
+    };
+    worker.postMessage({ doc, type: file.type, ...(extracted ? { extracted } : { bytes }) });
+  });
+}
 /** Importa un archivo: extrae su texto con ubicación, lo segmenta y lo guarda en este equipo. */
 export async function importDocument(
   file: File,
@@ -62,16 +115,8 @@ export async function importDocument(
   const existing = (await libraryStore.docs()).find((d) => d.sha256 === sha256) as SourceDoc | undefined;
   if (existing) return existing;
   onProgress({ phase: 'extrayendo', detail: file.name });
-  const extracted = await extractFile(
-    { name: file.name, type: file.type, bytes },
-    {
-      pdfjs: /\.pdf$/i.test(file.name) || file.type === 'application/pdf' ? await pdfjs() : undefined,
-      onProgress: (p, t) => onProgress({ phase: 'extrayendo', detail: `página ${p} de ${t}` }),
-    },
-  );
-  onProgress({ phase: 'segmentando', detail: `${extracted.blocks.length} bloques` });
   const id = crypto.randomUUID();
-  const chunks = segment({ id, name: file.name }, extracted);
+  const { extracted, chunks, academicProfile } = await processMaterial(file, bytes, id, onProgress);
   const doc: SourceDoc = {
     id,
     name: file.name,
@@ -86,6 +131,7 @@ export async function importDocument(
     chunks: chunks.length,
     outline: outlineOf(extracted),
     warnings: extracted.warnings,
+    academicProfile,
   };
   onProgress({ phase: 'guardando', detail: `${chunks.length} fragmentos` });
   await libraryStore.save(
@@ -95,9 +141,31 @@ export async function importDocument(
   );
   return doc;
 }
+
+/** Reconstrucción atómica del índice: el documento y el archivo original conservan su identidad. */
+export async function reindexDocument(id: string, onProgress: (p: ImportProgress) => void) {
+  const doc = (await listDocuments()).find((d) => d.id === id);
+  const original = await libraryStore.file(id);
+  if (!doc || !original) throw new Error('No se encontró el archivo original para reindexar.');
+  const file = new File([original], doc.name, { type: original.type });
+  onProgress({ phase: 'extrayendo', detail: doc.name });
+  const processed = await processMaterial(file, new Uint8Array(await file.arrayBuffer()), id, onProgress);
+  if (!processed.chunks.length)
+    throw new Error('La extracción no produjo texto. Se conserva el índice anterior.');
+  const next: SourceDoc = {
+    ...doc,
+    academicProfile: processed.academicProfile,
+    chunks: processed.chunks.length,
+    chars: processed.chunks.reduce((n, c) => n + c.text.length, 0),
+    outline: outlineOf(processed.extracted),
+    warnings: processed.extracted.warnings,
+  };
+  await libraryStore.replaceIndex(next as never, processed.chunks as never);
+  return next;
+}
 export async function listDocuments(): Promise<SourceDoc[]> {
   return ((await libraryStore.docs()) as unknown as SourceDoc[]).sort((a, b) =>
-    b.addedAt.localeCompare(a.addedAt),
+    (b.addedAt ?? '').localeCompare(a.addedAt ?? ''),
   );
 }
 export const removeDocument = (id: string) => libraryStore.remove(id);
@@ -114,6 +182,7 @@ export async function embedDocuments(
   const chunks = await documentChunks(ids);
   const have = await libraryStore.vectors(model, ids);
   const missing = chunks.filter((c) => !have.has(c.id));
+  onProgress(0, missing.length);
   const client = ollama();
   for (let i = 0; i < missing.length; i += 16) {
     signal?.throwIfAborted();
@@ -145,10 +214,14 @@ export async function vectorCoverage(ids: string[]) {
 export async function makeRetriever(
   ids: string[],
   focus?: { docId: string; slide: number } | null,
+  signal?: AbortSignal,
 ): Promise<{
   retrieve: (q: string, k: number) => Promise<RetrievedChunk[]>;
   index: KnowledgeIndex;
   dense: boolean;
+  lexical: (q: string, k: number) => Promise<RetrievedChunk[]>;
+  overview: string;
+  status: () => { mode: 'hibrida' | 'lexica'; coverage: number; total: number; degraded: boolean };
 } | null> {
   if (!ids.length) return null;
   const all = await documentChunks(ids);
@@ -158,41 +231,74 @@ export async function makeRetriever(
     ? all.filter((c) => focusedIds.has(c.id) || (c.docId !== focus.docId && c.slide === null))
     : all;
   if (!chunks.length) return null;
-  const model = useAi.getState().assign.embeddings;
-  const vectors = model && useAi.getState().useLlm ? await libraryStore.vectors(model, ids) : null;
-  const dense = !!vectors && vectors.size > 0;
+  const settings = useAi.getState();
+  const model = settings.assign.embeddings;
+  const client = ollama(settings);
+  const vectors = model ? await libraryStore.vectors(model, ids) : null;
+  const dense = !!vectors && chunks.some((c) => vectors.has(c.id));
+  let lastDense = dense;
   const index = new KnowledgeIndex(chunks, dense ? vectors : null);
-  const cache = new Map<string, number[]>();
-  let failed = false;
-  const retrieve = async (q: string, k: number) => {
-    let queryVector: number[] | null = null;
-    if (dense && !failed) {
-      queryVector = cache.get(q) ?? null;
-      if (!queryVector)
-        try {
-          queryVector = (await ollama().embed(model, [q]))[0] ?? null;
-          if (queryVector) cache.set(q, queryVector);
-        } catch {
-          failed = true;
-        }
+  const cache = new QueryVectorCache(async (q) => {
+    const vector = (await client.embed(model, [q], signal, 8000))[0]!;
+    const expected = vectors?.values().next().value?.length;
+    if (expected && vector.length !== expected)
+      throw new Error('Cambió la dimensión del modelo: reindexa embeddings.');
+    return vector;
+  });
+  const docs = (await listDocuments()).filter((d) => ids.includes(d.id));
+  for (const doc of docs) {
+    if (!doc.academicProfile) {
+      doc.academicProfile = prepareAcademicProfile(all.filter((c) => c.docId === doc.id));
+      await libraryStore.update(doc as never);
     }
+  }
+  const overview = docs
+    .map(
+      (d) =>
+        `${d.name}: ${JSON.stringify(d.academicProfile?.sections.slice(0, 24).map((s) => ({ seccion: s.title, conceptos: s.terms })))}`,
+    )
+    .join('\n');
+  const search = (q: string, k: number, queryVector: number[] | null) => {
     const hits = index.search(q, { k, queryVector });
     const anchored = focused
       .slice(0, Math.min(2, k))
       .map((c) => ({ ...c, chunkId: c.id, excerpt: c.text.slice(0, 240), score: 1 }));
-    return [...anchored, ...hits.filter((h) => !anchored.some((a) => a.id === h.id))]
-      .slice(0, k)
-      .map((h) => ({
-        docId: h.docId,
-        docName: h.docName,
-        chunkId: h.chunkId,
-        location: h.location,
-        excerpt: h.excerpt,
-        text: h.text,
-        score: h.score,
-      }));
+    return expandEvidence(
+      [...anchored, ...hits.filter((h) => !anchored.some((a) => a.id === h.id))].slice(0, k),
+      chunks,
+      10000,
+    ).map((h) => ({
+      docId: h.docId,
+      docName: h.docName,
+      chunkId: h.chunkId,
+      location: h.location,
+      excerpt: h.excerpt,
+      text: h.text,
+      score: h.score,
+    }));
   };
-  return { retrieve, index, dense };
+  const lexical = async (q: string, k: number) => search(q, k, null);
+  const retrieve = async (q: string, k: number) => {
+    signal?.throwIfAborted();
+    const vector = dense ? await cache.get(q) : null;
+    lastDense = vector !== null;
+    signal?.throwIfAborted();
+    return search(q, k, vector);
+  };
+  const coverage = chunks.filter((c) => vectors?.has(c.id)).length;
+  return {
+    retrieve,
+    lexical,
+    index,
+    dense,
+    overview,
+    status: () => ({
+      mode: lastDense ? 'hibrida' : 'lexica',
+      coverage,
+      total: chunks.length,
+      degraded: cache.degraded,
+    }),
+  };
 }
 /** Compara la presentación con el documento principal seleccionado. */
 export async function compareDocs(docId: string, slidesId: string) {

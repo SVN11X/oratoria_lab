@@ -515,10 +515,24 @@ export function Setup({
               de evaluación.
             </p>
             {setup.avatars === '3d' && (
+              <label className="field">
+                Calidad gráfica
+                <select
+                  value={setup.renderQuality}
+                  onChange={(e) => set({ renderQuality: e.target.value as PracticeSetup['renderQuality'] })}
+                >
+                  <option value="ligero">Ligero · menor resolución y 24 fps</option>
+                  <option value="equilibrado">Equilibrado · hasta 30 fps</option>
+                  <option value="alta">Alta calidad · mayor resolución, hasta 45 fps</option>
+                </select>
+              </label>
+            )}
+            {setup.avatars === '3d' && (
               <Suspense fallback={<p role="status">Cargando vista 3D…</p>}>
                 <HumanCommittee
                   participants={setup.participants}
                   handles={previewHandles}
+                  quality={setup.renderQuality}
                   onFallback={() => set({ avatars: 'ilustrados' })}
                 />
               </Suspense>

@@ -234,8 +234,17 @@ export type TurnRecord = {
 export type EngineStatus = 'idle' | 'opening' | 'exposition' | 'questions' | 'closing' | 'finished';
 
 /** Puerto hacia un modelo de lenguaje. El motor no sabe si es Ollama, LM Studio u otro servicio. */
+export type LlmMetrics = {
+  firstTokenMs?: number;
+  queueMs?: number;
+  loadMs?: number;
+  promptMs?: number;
+  tokensPerSecond?: number;
+};
 export interface LlmPort {
   readonly model: string;
+  /** Presupuesto aproximado en caracteres; no afirma conocer la tokenización exacta del modelo. */
+  readonly contextBudgetChars?: number;
   complete(
     messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
     options: {
@@ -245,6 +254,9 @@ export interface LlmPort {
       signal?: AbortSignal;
       timeoutMs?: number;
       temperature?: number;
+      /** Fragmentos de texto. Un consumidor debe validar la intervención antes de pronunciarla. */
+      onDelta?: (delta: string) => void;
+      onMetrics?: (metrics: LlmMetrics) => void;
     },
   ): Promise<string>;
 }

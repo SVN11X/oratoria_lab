@@ -24,7 +24,7 @@
     "prepare:wasm": "node scripts/copy-wasm.mjs",
     "benchmark": "node --experimental-strip-types scripts/benchmark.ts",
     "pin:vision": "node scripts/pin-vision-models.mjs",
-    "benchmark:local": "node scripts/benchmark-local.mjs",
+    "benchmark:local": "node --experimental-strip-types scripts/benchmark-local.mjs",
     "verify:avatars": "node scripts/verify-avatar-assets.mjs"
   },
   "devDependencies": {

@@ -168,6 +168,19 @@ export const libraryStore = {
   async update(doc: StoredDoc) {
     await (await db()).put('docs', doc);
   },
+  /** Sustituye solo datos derivados después de una extracción correcta. La transacción preserva el original. */
+  async replaceIndex(doc: StoredDoc, chunks: StoredChunk[]) {
+    if (chunks.some((c) => c.docId !== doc.id))
+      throw new Error('El índice contiene fragmentos de otro documento.');
+    const tx = (await db()).transaction(['docs', 'docChunks', 'vectors'], 'readwrite');
+    await tx.objectStore('docs').put(doc);
+    for (const key of await tx.objectStore('docChunks').index('byDoc').getAllKeys(doc.id))
+      await tx.objectStore('docChunks').delete(key);
+    for (const key of await tx.objectStore('vectors').index('byDoc').getAllKeys(doc.id))
+      await tx.objectStore('vectors').delete(key);
+    for (const chunk of chunks) await tx.objectStore('docChunks').put(chunk);
+    await tx.done;
+  },
   /** Elimina el documento, su archivo, sus fragmentos y todos sus vectores. */
   async remove(id: string) {
     const d = await db();

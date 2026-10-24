@@ -1,3 +1,5 @@
+> **Modernización incremental:** consulta [MODERNIZACION](MODERNIZACION.md) para la implementación sobre `9fe3ad1`, los resultados nuevos y sus límites. El estado 0.3.0 de abajo se conserva como referencia histórica.
+
 # Estado real de Oratoria Lab 0.3.0
 
 Fecha: 23 de octubre de 2026. Base `cf8433151ea3743fb1b1e9862537eb68d4c61bae`. Auditoría histórica: [AUDITORIA](AUDITORIA.md); revisión y cambios actuales: [AUDITORIA-V2](AUDITORIA-V2.md).

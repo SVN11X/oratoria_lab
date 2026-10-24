@@ -17,6 +17,7 @@ import { formatDuration } from '@oratoria/core';
 import { downloadBlob, safeFilename } from '@oratoria/export';
 import { PageHead, Metric, Chart, Confirm } from '../components';
 import { recordMedia, historyPoints, useRecords, type PracticeRecord } from './records';
+import { Diagnostics } from './Diagnostics';
 
 export function LevelDots({ level }: { level: CriterionResult['level'] }) {
   if (level === null) return <span className="badge">No evaluado</span>;
@@ -467,6 +468,7 @@ export function Report({
           </p>
         ))}
       </section>
+      {record.diagnostics && <Diagnostics report={record.diagnostics} />}
       {deleting && onDeleted && (
         <Confirm title="¿Eliminar esta práctica?" onCancel={() => setDeleting(false)} onConfirm={onDeleted}>
           Se borrarán el informe y la grabación de este equipo.

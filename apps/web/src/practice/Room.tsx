@@ -22,6 +22,7 @@ import {
   TEMPERAMENTS,
   coachPlan,
   evaluateSession,
+  TurnDiagnostics,
   type Move,
   type RetrievedChunk,
   type ScenarioId,
@@ -51,11 +52,11 @@ import { toConfig, type PracticeSetup } from './store';
 import type { PracticeRecord } from './records';
 import type { Stt } from '../voice/stt';
 import type { SpeakHandle, Tts } from '../voice/tts';
+import { Diagnostics } from './Diagnostics';
 
 const HumanCommittee = lazy(() => import('./HumanCommittee').then((m) => ({ default: m.HumanCommittee })));
 
 type Stage = 'preparando' | 'agente' | 'exposicion' | 'respuesta' | 'pensando' | 'cierre';
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const KIND_TEXT: Record<Move['kind'], string> = {
   saludo: 'saluda',
   pregunta: 'pregunta',
@@ -83,6 +84,10 @@ export function Room({
     micId = usePreferences((s) => s.micId),
     cameraId = usePreferences((s) => s.cameraId);
   const ai = useAi();
+  const telemetry = useRef(new TurnDiagnostics());
+  const [diagnostics, setDiagnostics] = useState(() => telemetry.current.export());
+  const [draft, setDraft] = useState<{ speakerId: string; text: string } | null>(null);
+  const [ragStatus, setRagStatus] = useState('Sin documentos seleccionados');
   const [stage, setStage] = useState<Stage>('preparando'),
     [paused, setPaused] = useState(false),
     [illustrated, setIllustrated] = useState(setup.avatars === 'ilustrados'),
@@ -167,6 +172,8 @@ export function Room({
     go('agente');
     const handle = tts.current.speak(m.text, voiceSpec(p, indexOf(p.id)), {
       onMouth: (mouth) => avatars.current.get(m.speakerId)?.setMouth(mouth),
+      onStart: () => telemetry.current.mark('firstAudioMs', true),
+      onSynthesis: (ms) => telemetry.current.add('synthesisMs', ms, true),
     });
     speech.current = handle;
     let barge: ReturnType<typeof setInterval> | undefined;
@@ -184,7 +191,6 @@ export function Room({
       await handle.done;
     } catch (e) {
       warn(`La voz falló (${errorMessage(e)}). El texto sigue en pantalla.`);
-      await sleep(1500);
     } finally {
       clearInterval(barge);
       speech.current = null;
@@ -209,9 +215,10 @@ export function Room({
         i === moves.length - 1 &&
         ['pregunta', 'repregunta', 'interrupcion', 'reformulacion'].includes(m.kind);
       await speakMove(m, lastAsk);
-      if (moves.length > 1 && i < moves.length - 1) await sleep(250);
     }
     if (!alive.current) return;
+    telemetry.current.mark('responseMs');
+    setDiagnostics(telemetry.current.export());
     setProgress({ asked: e.moves.filter((m) => m.kind === 'pregunta').length, total: config.questions });
     if (e.status === 'finished') return finish();
     const turn = e.currentTurn;
@@ -245,10 +252,14 @@ export function Room({
     setModes(a.move.speakerId, 'thinking');
     setStatus(`${e.participant(a.move.speakerId).name} considera tu respuesta…`);
     stt.current?.setListening(false, s.now());
+    telemetry.current.begin(enginesRef.current.llm || null, enginesRef.current.llm ? ai.provider : 'reglas');
+    telemetry.current.add('captureMs', Math.max(0, s.now() - a.askedAt) * 1000);
     try {
       if (stt.current) {
+        const transcriptionAt = performance.now();
         setTranscribing(!stt.current.live);
         await stt.current.flush();
+        telemetry.current.add('transcriptionMs', performance.now() - transcriptionAt);
       }
       setTranscribing(false);
       const text = [
@@ -288,7 +299,14 @@ export function Room({
       await present(moves);
     } catch (err) {
       busy.current = false;
-      if (alive.current) warn(`No se pudo continuar la conversación: ${errorMessage(err)}`);
+      if (alive.current) {
+        warn(`No se pudo continuar la conversación: ${errorMessage(err)}`);
+        if (!e.currentTurn?.answer) {
+          asking.current = a;
+          listen('respuesta');
+          go('respuesta');
+        }
+      }
     }
   }
   async function interrupt() {
@@ -319,6 +337,7 @@ export function Room({
     if (!e || stageRef.current !== 'exposicion' || busy.current) return;
     plan.current = [];
     busy.current = true;
+    telemetry.current.begin(enginesRef.current.llm || null, enginesRef.current.llm ? ai.provider : 'reglas');
     go('pensando');
     setStatus('La comisión prepara sus preguntas…');
     stt.current?.setListening(false, sensors.current?.now() ?? 0);
@@ -379,9 +398,15 @@ export function Room({
       llm: llmFor('evaluacion'),
       criteria: active,
       chunks: retrieverChunks.current,
-    }).catch((err) => {
+    }).catch(async (err) => {
       warn(`No se pudo completar la evaluación: ${errorMessage(err)}`);
-      return null;
+      return evaluateSession({
+        snapshot,
+        findings: report.findings,
+        llm: null,
+        criteria: active,
+        chunks: retrieverChunks.current,
+      });
     });
     if (!evaluation || !alive.current) return;
     const order = ['basica', 'intermedia', 'avanzada', 'experta', 'extrema'] as const;
@@ -409,6 +434,7 @@ export function Room({
       docNames: docNames.current,
       media: media ? { type: media.type, bytes: media.size } : null,
       goal: setup.goal,
+      diagnostics: telemetry.current.export(),
     };
     onFinish(record, media);
   }
@@ -433,7 +459,7 @@ export function Room({
       try {
         const [{ tts: t, warning: tw }, retriever, docs] = await Promise.all([
           makeTts(),
-          makeRetriever(setup.docIds, config.focus),
+          makeRetriever(setup.docIds, config.focus, signal.signal),
           listDocuments(),
         ]);
         tts.current = t;
@@ -442,7 +468,7 @@ export function Room({
         if (setup.docIds.length && !retriever)
           warn('El material seleccionado no tiene texto extraíble; las preguntas no podrán citarlo.');
         if (retriever)
-          retrieverChunks.current = await retriever.retrieve(
+          retrieverChunks.current = await retriever.lexical(
             `${config.topic} objetivo metodología resultados conclusiones`,
             6,
           );
@@ -514,10 +540,43 @@ export function Room({
           llm: llm?.model ?? '',
         };
         setEngines(enginesRef.current);
+        telemetry.current.begin(llm?.model ?? null, llm ? ai.provider : 'reglas');
+        const refreshRag = () => {
+          if (!alive.current) return;
+          const state = retriever?.status();
+          setRagStatus(
+            !state
+              ? 'Sin material recuperable'
+              : `${state.mode === 'hibrida' ? 'Búsqueda híbrida' : 'Búsqueda por palabras'} · ${state.coverage}/${state.total} fragmentos con embeddings${state.degraded ? ' · Ollama sin respuesta; reintento habilitado' : ''}`,
+          );
+        };
+        refreshRag();
         const e = new ConversationEngine(config, {
           llm,
           retrieve: retriever?.retrieve ?? null,
           signal: signal.signal,
+          dialogue: ai.conversationMode === 'academica' ? 'evaluado' : 'directo',
+          retrieveLocal: retriever?.lexical,
+          academicOverview: retriever?.overview,
+          onDraft: (speakerId, text) => {
+            if (alive.current) setDraft(text ? { speakerId, text } : null);
+          },
+          onPhase: (phase) => {
+            if (alive.current)
+              setStatus(
+                phase === 'recuperando'
+                  ? 'Consultando los documentos seleccionados…'
+                  : 'Preparando la respuesta…',
+              );
+          },
+          onTiming: (key, ms) => {
+            telemetry.current.add(key, ms, true);
+            refreshRag();
+          },
+          onMetrics: (metrics) => {
+            for (const [key, value] of Object.entries(metrics))
+              if (value !== undefined) telemetry.current.add(key as keyof typeof metrics, value);
+          },
         });
         engine.current = e;
         const first = await e.start();
@@ -701,6 +760,8 @@ export function Room({
               handles={avatars}
               speakerId={speaking}
               paused={paused}
+              quality={setup.renderQuality}
+              generating={stage === 'pensando'}
               onFallback={() => setIllustrated(true)}
             />
           </Suspense>
@@ -778,9 +839,16 @@ export function Room({
                 ))}
             </>
           ) : stage === 'pensando' || stage === 'preparando' || stage === 'cierre' ? (
-            <p className="band-status" role="status">
-              <span className="spinner" /> {transcribing ? 'Transcribiendo tu voz en este equipo…' : status}
-            </p>
+            <div role="status">
+              <p className="band-status">
+                <span className="spinner" /> {transcribing ? 'Transcribiendo tu voz en este equipo…' : status}
+              </p>
+              {draft && showText && (
+                <p className="said" aria-label="Borrador de la intervención" aria-busy="true">
+                  {draft.text}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="caption">
               {stage === 'exposicion'
@@ -938,8 +1006,10 @@ export function Room({
             Interlocutores: {engines.llm ? `modelo ${engines.llm}` : 'reglas del motor'}
             {ai.useLlm && !engines.llm ? ' (sin modelo asignado)' : ''}
           </p>
+          <p className="caption">{ragStatus}</p>
           {current?.reason && <p className="caption">Por qué esta intervención: {current.reason}</p>}
         </section>
+        <Diagnostics report={diagnostics} />
       </aside>
       {confirmCancel && (
         <Confirm

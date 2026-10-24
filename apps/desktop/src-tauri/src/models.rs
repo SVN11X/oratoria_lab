@@ -181,10 +181,54 @@ pub struct SystemInfo {
     pub cpu_brand: String,
     pub cpu_cores: usize,
     pub os: String,
+    pub gpus: Vec<GpuInfo>,
+}
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuInfo {
+    pub name: String,
+    pub total_memory_bytes: u64,
+    pub available_memory_bytes: u64,
+    pub source: &'static str,
+}
+fn parse_nvidia(text: &str) -> Vec<GpuInfo> {
+    text.lines().filter_map(|line| {
+        let parts: Vec<_> = line.rsplitn(3, ',').map(str::trim).collect();
+        if parts.len() != 3 { return None; }
+        let free = parts[0].parse::<u64>().ok()?;
+        let total = parts[1].parse::<u64>().ok()?;
+        if total == 0 || free > total { return None; }
+        Some(GpuInfo { name: parts[2].into(), total_memory_bytes: total * 1024 * 1024,
+            available_memory_bytes: free * 1024 * 1024, source: "nvidia-smi" })
+    }).collect()
+}
+/// Consulta fija y de solo lectura. No usa shell y abandona procesos sin respuesta en dos segundos.
+fn nvidia_gpus() -> Vec<GpuInfo> {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let mut command = Command::new("nvidia-smi");
+    command.args(["--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"])
+        .stdout(Stdio::piped()).stderr(Stdio::null());
+    #[cfg(windows)] {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // Sin ventana de consola.
+    }
+    let Ok(mut child) = command.spawn() else { return vec![]; };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => {
+                return child.wait_with_output().ok().map(|o| parse_nvidia(&String::from_utf8_lossy(&o.stdout))).unwrap_or_default();
+            },
+            Ok(Some(_)) | Err(_) => { let _ = child.kill(); let _ = child.wait(); return vec![]; },
+            _ if Instant::now() >= deadline => { let _ = child.kill(); let _ = child.wait(); return vec![]; },
+            _ => std::thread::sleep(Duration::from_millis(10)),
+        }
+    }
 }
 pub fn system_info() -> SystemInfo {
     use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
-    let sys = System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()).with_cpu(CpuRefreshKind::nothing()));
+    let sys = System::new_with_specifics(RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()).with_cpu(CpuRefreshKind::everything()));
     let brand = sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default();
     SystemInfo {
         total_memory_bytes: sys.total_memory(),
@@ -192,12 +236,20 @@ pub fn system_info() -> SystemInfo {
         cpu_brand: brand,
         cpu_cores: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(sys.cpus().len()),
         os: System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string()),
+        gpus: nvidia_gpus(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn nvidia_memory_is_mib_not_adapter_ram_u32() {
+        let g = parse_nvidia("NVIDIA GeForce RTX 2060, 6144, 5048\nGPU, N/A, N/A");
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].total_memory_bytes, 6 * 1024 * 1024 * 1024);
+        assert_eq!(g[0].available_memory_bytes, 5048 * 1024 * 1024);
+    }
     fn temp() -> PathBuf {
         let p = std::env::temp_dir().join(format!("oratoria-ollama-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&p).unwrap();

@@ -30,7 +30,7 @@ export const PROFILE_TEXT: Record<Profile, { name: string; what: string }> = {
   equilibrado: { name: 'Equilibrado', what: 'Buena relación entre calidad y velocidad. Para 16 GB de RAM.' },
   calidad: {
     name: 'Máxima calidad local',
-    what: 'Modelos más capaces si tu equipo puede ejecutarlos (32 GB o GPU dedicada).',
+    what: 'Análisis más extenso. Requiere comprobar VRAM, contexto y velocidad real antes de usarlo en conversación.',
   },
   personalizado: { name: 'Personalizado', what: 'Eliges manualmente cada modelo.' },
 };
@@ -74,7 +74,7 @@ export const CATALOG: CatalogEntry[] = [
     ramGb: 7,
     tier: 'equilibrado',
     spanish: 'Multilingüe; buen equilibrio para español.',
-    note: 'Recomendado si no tienes GPU dedicada y tienes 16 GB.',
+    note: 'Candidato rápido para GPU de 6 GiB; confirma carga y velocidad con la prueba local.',
     source: 'https://ollama.com/library/qwen3.5',
   },
   {
@@ -85,8 +85,8 @@ export const CATALOG: CatalogEntry[] = [
     downloadGb: '6,6–7,6',
     ramGb: 11,
     tier: 'calidad',
-    spanish: 'Multilingüe; mejores repreguntas y evaluaciones.',
-    note: 'Conviene GPU con 8 GB o más, o 32 GB de RAM.',
+    spanish: 'Multilingüe; candidato para análisis académico.',
+    note: 'Puede repartir carga entre CPU y GPU. La RAM abundante no garantiza conversación rápida.',
     source: 'https://ollama.com/library/qwen3.5',
   },
   {
@@ -160,17 +160,19 @@ export type Hardware = {
   webgpu: boolean;
   /** Puntaje del microbenchmark de CPU (mayor es más rápido), si se ejecutó. */
   cpuScore: number | null;
+  /** Solo medidas nativas. Nunca se infieren de la RAM o del nombre de GPU. */
+  vramGb?: number | null;
+  availableVramGb?: number | null;
+  availableRamGb?: number | null;
+  cpuBrand?: string | null;
+  gpuSource?: 'nvidia-smi' | 'webgpu' | 'webgl' | 'desconocido';
 };
 export function profileForHardware(h: Hardware): Exclude<Profile, 'personalizado'> {
-  // Chrome informa como máximo 8 GB: con ese valor, la velocidad medida decide entre 8 y 16 GB.
+  // Un microbenchmark JavaScript no permite deducir la RAM física ni la VRAM.
   const capped = h.ramSource === 'navegador' && (h.ramGb ?? 0) >= 8;
-  const ram = capped
-    ? (h.cpuScore ?? 0) >= 2
-      ? 16
-      : 8
-    : (h.ramGb ?? (h.cpuScore !== null && h.cpuScore > 1.5 ? 16 : 8));
-  if (ram >= 30 || (h.gpu && /nvidia|rtx|radeon rx|apple m[2-9]/i.test(h.gpu) && ram >= 16)) return 'calidad';
-  if (ram >= 15) return 'equilibrado';
+  const ram = h.ramGb ?? 0;
+  if ((h.vramGb ?? 0) >= 10 && (h.availableVramGb ?? h.vramGb ?? 0) >= 8 && ram >= 15) return 'calidad';
+  if (ram >= 15 || capped) return 'equilibrado';
   return 'eficiente';
 }
 
@@ -341,10 +343,13 @@ export function planProfile(
     number,
   ];
   const chat = installed.filter((m) => !isEmbeddingModel(m)).map((m) => ({ m, p: paramsBillions(m) ?? 0 }));
-  const inRange = chat.filter((c) => c.p >= want[0] && c.p <= want[1]).sort((a, b) => b.p - a.p);
-  const fallback = chat
-    .filter((c) => c.p >= 1)
-    .sort((a, b) => Math.abs(a.p - (want[0] + want[1]) / 2) - Math.abs(b.p - (want[0] + want[1]) / 2));
+  const target = { eficiente: 2, equilibrado: 4, calidad: 9 }[profile];
+  const preferred = `qwen3.5:${target}b`;
+  const sortChat = (a: (typeof chat)[number], b: (typeof chat)[number]) =>
+    Number(b.m.name === preferred) - Number(a.m.name === preferred) ||
+    Math.abs(a.p - target) - Math.abs(b.p - target);
+  const inRange = chat.filter((c) => c.p >= want[0] && c.p <= want[1]).sort(sortChat);
+  const fallback = chat.filter((c) => c.p >= 1).sort(sortChat);
   const conv = inRange[0]?.m.name ?? fallback[0]?.m.name;
   const emb =
     installed.find(
@@ -363,7 +368,8 @@ export function planProfile(
     );
   const fromCatalog = (f: 'conversacion' | 'embeddings') =>
     downloads.find((d) => d.functions.includes(f))?.tag;
-  const evalModel = inRange.find((c) => c.p >= 3)?.m.name ?? conv;
+  // Compartir el modelo evita recargas; el usuario puede asignar otro evaluador explícitamente.
+  const evalModel = conv;
   return {
     assignments: {
       conversacion: conv ?? fromCatalog('conversacion'),

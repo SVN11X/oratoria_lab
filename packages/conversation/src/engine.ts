@@ -11,6 +11,8 @@ import {
   extractJson,
   interruptionPrompt,
   questionPrompt,
+  followUpPrompt,
+  jsonStringPrefix,
 } from './prompts';
 import {
   chairOf,
@@ -42,13 +44,24 @@ import type {
   SessionConfig,
   Stage,
   TurnRecord,
+  LlmMetrics,
 } from './types';
+import type { TimingKey } from './diagnostics';
 
 export type EngineDeps = {
   llm?: LlmPort | null;
   retrieve?: Retriever | null;
   rng?: () => number;
   signal?: AbortSignal;
+  /** Directo: comprensión y planificación local; una generación y evaluación separada al cierre. */
+  dialogue?: 'directo' | 'evaluado';
+  /** Preparación por el índice local, sin inferencias de embeddings por cada área. */
+  retrieveLocal?: Retriever | null;
+  onDraft?: (speakerId: string, text: string) => void;
+  onPhase?: (phase: 'recuperando' | 'generando') => void;
+  onTiming?: (key: TimingKey, ms: number) => void;
+  onMetrics?: (metrics: LlmMetrics) => void;
+  academicOverview?: string;
   /** Tiempos máximos por llamada al modelo (ms). */
   timeouts?: { question?: number; decision?: number; interruption?: number };
 };
@@ -96,6 +109,7 @@ export class ConversationEngine {
   private rng: () => number;
   private names: Map<string, string>;
   private llmFailures = 0;
+  private llmRetryAt = 0;
   private recentReactions = new Map<string, string[]>();
   private lastOpener = new Map<string, string>();
   private mainCore = '';
@@ -117,7 +131,7 @@ export class ConversationEngine {
     return this.current;
   }
   get llmActive() {
-    return !!this.deps.llm && this.llmFailures < 3;
+    return !!this.deps.llm && (this.llmFailures < 3 || performance.now() >= this.llmRetryAt);
   }
   participant(id: string) {
     return this.participants.find((p) => p.id === id) ?? this.participants[0]!;
@@ -149,9 +163,12 @@ export class ConversationEngine {
     parse: (v: unknown) => T,
     timeoutMs: number,
     schema: Record<string, unknown>,
+    speakerId?: string,
   ): Promise<T | null> {
     const llm = this.deps.llm;
-    if (!llm || this.llmFailures >= 3) return null;
+    if (!llm || !this.llmActive) return null;
+    const started = performance.now();
+    let partial = '';
     try {
       const raw = await llm.complete(messages, {
         json: true,
@@ -159,23 +176,42 @@ export class ConversationEngine {
         signal: this.deps.signal,
         timeoutMs,
         temperature: 0.7,
+        onDelta: speakerId
+          ? (delta) => {
+              partial += delta;
+              const draft = jsonStringPrefix(partial, 'pregunta');
+              if (draft.length <= 500 && civilityIssues(draft).length === 0)
+                this.deps.onDraft?.(speakerId, draft);
+            }
+          : undefined,
+        onMetrics: this.deps.onMetrics,
       });
       const value = parse(extractJson(raw));
+      this.deps.signal?.throwIfAborted();
       this.llmFailures = 0;
       return value;
     } catch (error) {
       if (this.deps.signal?.aborted) throw error;
       this.llmFailures++;
+      if (this.llmFailures >= 3) this.llmRetryAt = performance.now() + 15000;
       this.note(
         this.llmFailures >= 3
-          ? 'El modelo de lenguaje falló varias veces seguidas; el resto de la práctica usa las reglas del motor.'
+          ? 'El modelo de lenguaje falló varias veces seguidas; se usan reglas temporalmente y se permite reintentar después de 15 segundos.'
           : `Una intervención se generó con reglas porque el modelo no respondió a tiempo o con un formato válido (${error instanceof Error ? error.message.slice(0, 120) : 'error'}).`,
       );
       return null;
+    } finally {
+      if (speakerId) this.deps.onDraft?.(speakerId, '');
+      this.deps.onTiming?.('generationMs', performance.now() - started);
     }
   }
   private async retrieve(query: string, k: number): Promise<RetrievedChunk[]> {
+    this.deps.signal?.throwIfAborted();
+    this.deps.onPhase?.('recuperando');
+    const started = performance.now();
     const material = this.deps.retrieve ? await this.deps.retrieve(query, k).catch(() => []) : [];
+    this.deps.signal?.throwIfAborted();
+    this.deps.onTiming?.('ragMs', performance.now() - started);
     if (material.length) return material;
     return this.expositionChunks(query, Math.min(k, 3));
   }
@@ -198,10 +234,11 @@ export class ConversationEngine {
     }));
   }
   private async computeRelevance() {
-    if (!this.deps.retrieve || this.relevance) return;
+    const local = this.deps.retrieveLocal;
+    if (!local || this.relevance) return;
     const map = new Map<string, number>();
     for (const a of this.scenario.areas) {
-      const hits = await this.deps.retrieve(`${a.query} ${this.config.topic}`, 1).catch(() => []);
+      const hits = await local(`${a.query} ${this.config.topic}`, 1).catch(() => []);
       map.set(a.id, hits[0]?.score ?? 0);
     }
     const max = Math.max(...map.values(), 1e-9);
@@ -213,6 +250,38 @@ export class ConversationEngine {
   }
   private acceptable(text: string | null | undefined): text is string {
     return !!text && text.trim().length >= 8 && civilityIssues(text).length === 0;
+  }
+  private grounded(
+    text: string,
+    ids: string[],
+    chunks: RetrievedChunk[],
+    messages?: Parameters<LlmPort['complete']>[0],
+  ) {
+    if (ids.some((id) => !/^S[1-9]\d*$/.test(id) || !chunks[Number(id.slice(1)) - 1])) return false;
+    if (messages) {
+      const visible = new Set(
+        [
+          ...messages
+            .map((m) => m.content)
+            .join('\n')
+            .matchAll(/^\[(S[1-9]\d*)\]/gm),
+        ].map((m) => m[1]),
+      );
+      if (ids.some((id) => !visible.has(id))) return false;
+    }
+    if (
+      !ids.length &&
+      /(?:su|el) (?:documento|tesis) (?:afirma|indica|muestra|dice|concluye|demuestra)|en su (?:tesis|documento) (?:afirma|indica|dice|sostiene)/i.test(
+        text,
+      )
+    )
+      return false;
+    const pages = [...text.matchAll(/\b(?:p[aá]g(?:ina|\.)?|diapositiva)\s*(\d+)/gi)];
+    return pages.every((m) =>
+      this.citationsFrom(ids, chunks).some((c) =>
+        new RegExp(`(?:p[aá]g\\.|diap\\.)\\s*${Number(m[1])}(?!\\d)`, 'i').test(c.location),
+      ),
+    );
   }
   private citationsFrom(ids: string[], chunks: RetrievedChunk[]): Citation[] {
     return [...new Set(ids)]
@@ -289,7 +358,7 @@ export class ConversationEngine {
         this.deps.timeouts?.interruption ?? 15000,
         { type: 'object', properties: { pregunta: { type: 'string' } }, required: ['pregunta'] },
       );
-      if (r && this.acceptable(r.pregunta)) {
+      if (r && this.acceptable(r.pregunta) && this.grounded(r.pregunta, [], chunks)) {
         text = r.pregunta;
         generator = 'ia';
       }
@@ -360,27 +429,39 @@ export class ConversationEngine {
       reason = '',
       generator: Move['generator'] = 'reglas';
     if (this.llmActive) {
-      for (let attempt = 0; attempt < 2 && !text; attempt++) {
+      for (let attempt = 0; attempt < (this.deps.dialogue === 'directo' ? 1 : 2) && !text; attempt++) {
+        this.deps.onPhase?.('generando');
+        const contextStarted = performance.now();
+        const messages = questionPrompt({
+          participant: p,
+          others: this.participants.filter((o) => o !== p),
+          scenario: this.scenario,
+          config: this.config,
+          stage,
+          areaName: area.name,
+          areaQuery: area.query,
+          chunks,
+          exposition: this.expositionText(),
+          turns: this.turns,
+          asked: this.memory.asked,
+          names: this.names,
+          overview: this.deps.academicOverview,
+          budgetChars: this.deps.llm?.contextBudgetChars,
+        });
+        this.deps.onTiming?.('contextMs', performance.now() - contextStarted);
         const r = await this.llmJson(
-          questionPrompt({
-            participant: p,
-            others: this.participants.filter((o) => o !== p),
-            scenario: this.scenario,
-            config: this.config,
-            stage,
-            areaName: area.name,
-            areaQuery: area.query,
-            chunks,
-            exposition: this.expositionText(),
-            turns: this.turns,
-            asked: this.memory.asked,
-            names: this.names,
-          }),
+          messages,
           (v) => QuestionSchema.parse(v),
           this.deps.timeouts?.question ?? 45000,
           QUESTION_JSON_SCHEMA,
+          p.id,
         );
-        if (r && this.acceptable(r.pregunta) && !this.isRepeat(r.pregunta)) {
+        if (
+          r &&
+          this.acceptable(r.pregunta) &&
+          !this.isRepeat(r.pregunta) &&
+          this.grounded(r.pregunta, r.fuentes, chunks, messages)
+        ) {
           text = r.pregunta;
           core = r.pregunta;
           sources = this.citationsFrom(r.fuentes, chunks);
@@ -485,7 +566,7 @@ export class ConversationEngine {
       followSources: Citation[] = [],
       generator: Move['generator'] = 'reglas';
     let decided = false;
-    if (this.llmActive && words(input.text).length > 0) {
+    if (this.llmActive && this.deps.dialogue !== 'directo' && words(input.text).length > 0) {
       const d = await this.llmJson(
         decisionPrompt({
           participant: p,
@@ -505,16 +586,31 @@ export class ConversationEngine {
         this.deps.timeouts?.decision ?? 30000,
         DECISION_JSON_SCHEMA,
       );
-      if (d) {
+      // Una discrepancia numérica ya trae su ubicación comprobada. Se puede reutilizar cuando
+      // el adaptador anterior no devuelve fuentes; nunca sustituir IDs explícitos inválidos.
+      const decisionSources = d?.fuentes.length
+        ? d.fuentes
+        : context.flatMap((chunk, i) =>
+            analysis.contradictions.some(
+              (contradiction) => contradiction.location === `${chunk.docName}, ${chunk.location}`,
+            )
+              ? [`S${i + 1}`]
+              : [],
+          );
+      if (d && this.grounded(`${d.reaccion} ${d.repregunta ?? ''}`, decisionSources, context)) {
         decided = true;
         // Una contradicción numérica detectada por reglas tiene evidencia verificable: prevalece.
-        const type = analysis.contradictions.length ? 'contradice_documento' : d.tipo;
+        const type = analysis.contradictions.length
+          ? 'contradice_documento'
+          : d.tipo === 'contradice_documento'
+            ? 'parcial'
+            : d.tipo;
         analysis = { ...analysis, type, generator: 'ia' };
         if (this.acceptable(d.reaccion) || d.reaccion === '') reaction = d.reaccion || reaction;
         if (canFollow && this.acceptable(d.repregunta) && (reformulating || !this.isRepeat(d.repregunta!))) {
           follow = d.repregunta!;
           followReason = d.motivo || 'El modelo consideró que la respuesta necesitaba precisión.';
-          followSources = this.citationsFrom(d.fuentes, context);
+          followSources = this.citationsFrom(decisionSources, context);
           generator = 'ia';
         }
       }
@@ -544,6 +640,48 @@ export class ConversationEngine {
         followReason = r.reason;
       }
     }
+    if (this.deps.dialogue === 'directo' && follow && this.llmActive && input.text.trim()) {
+      this.deps.onPhase?.('generando');
+      const contextStarted = performance.now();
+      const messages = followUpPrompt({
+        participant: p,
+        others: this.participants.filter((o) => o !== p),
+        scenario: this.scenario,
+        config: this.config,
+        stage: this.stage,
+        question: q.text,
+        answer: input.text,
+        analysis,
+        chunks: context,
+        allowFollowUp: true,
+        turns: this.turns.filter((t) => t !== c),
+        names: this.names,
+        purpose: followReason,
+        asked: this.memory.asked,
+        overview: this.deps.academicOverview,
+        budgetChars: this.deps.llm?.contextBudgetChars,
+      });
+      this.deps.onTiming?.('contextMs', performance.now() - contextStarted);
+      const r = await this.llmJson(
+        messages,
+        (v) => QuestionSchema.parse(v),
+        this.deps.timeouts?.question ?? 45000,
+        QUESTION_JSON_SCHEMA,
+        p.id,
+      );
+      if (
+        r &&
+        this.acceptable(r.pregunta) &&
+        (reformulating || !this.isRepeat(r.pregunta)) &&
+        this.grounded(r.pregunta, r.fuentes, context, messages)
+      ) {
+        follow = r.pregunta;
+        followSources = this.citationsFrom(r.fuentes, context);
+        generator = 'ia';
+        reaction = ''; // La intervención ya reacciona al contenido; no anteponer elogios automáticos.
+      }
+    }
+    if (this.deps.dialogue === 'directo') reaction = '';
     c.answer = {
       text: input.text,
       durationSec: input.durationSec,
